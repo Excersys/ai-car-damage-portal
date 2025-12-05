@@ -2,6 +2,8 @@ import { getScans } from "@/lib/actions";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export default async function QCQueue() {
   const scans = await getScans();
   const pendingScans = scans.filter((scan) => scan.qcStatus === 'Pending');
@@ -89,4 +91,3 @@ export default async function QCQueue() {
     </div>
   );
 }
-

@@ -2,6 +2,8 @@ import { getScans } from "@/lib/actions";
 import { Camera, Activity, Clock } from "lucide-react";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 export default async function Dashboard() {
   const recentScans = await getScans();
   

@@ -50,7 +50,7 @@ export async function getReservationsByCarId(carId: string): Promise<Reservation
     FROM reservations WHERE car_id = $1
     ORDER BY start_date DESC
   `, [carId]);
-  return res.rows.map(row => ({
+  return res.rows.map((row: any) => ({
     ...row,
     startDate: row.startDate.toISOString(),
     endDate: row.endDate.toISOString()
@@ -65,7 +65,7 @@ export async function getAllReservations(): Promise<Reservation[]> {
     FROM reservations
     ORDER BY start_date DESC
   `);
-  return res.rows.map(row => ({
+  return res.rows.map((row: any) => ({
     ...row,
     startDate: row.startDate.toISOString(),
     endDate: row.endDate.toISOString()
@@ -86,7 +86,7 @@ export async function getScans(): Promise<ScanEvent[]> {
     ORDER BY s.timestamp DESC
   `);
 
-  const scans = await Promise.all(res.rows.map(async (row) => {
+  const scans = await Promise.all(res.rows.map(async (row: any) => {
       const damageRes = await query(`SELECT label, confidence, x, y, width, height FROM detected_damage WHERE scan_id = $1`, [row.id]);
       return {
           ...row,
@@ -145,7 +145,7 @@ export async function getScansByCarId(carId: string): Promise<ScanEvent[]> {
     ORDER BY s.timestamp DESC
   `, [carId]);
 
-  const scans = await Promise.all(res.rows.map(async (row) => {
+  const scans = await Promise.all(res.rows.map(async (row: any) => {
       const damageRes = await query(`SELECT label, confidence, x, y, width, height FROM detected_damage WHERE scan_id = $1`, [row.id]);
       return {
           ...row,
@@ -205,12 +205,12 @@ export async function searchGlobal(queryStr: string) {
 
   return {
     cars: carsRes.rows,
-    reservations: resRes.rows.map(row => ({
+    reservations: resRes.rows.map((row: any) => ({
         ...row,
         startDate: row.startDate.toISOString(),
         endDate: row.endDate.toISOString()
     })),
-    scans: scanRes.rows.map(row => ({
+    scans: scanRes.rows.map((row: any) => ({
         ...row,
         timestamp: row.timestamp.toISOString(),
         imageUrls: { 

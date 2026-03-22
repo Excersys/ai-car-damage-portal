@@ -61,6 +61,9 @@ coverage/
 *.png
 *.mp4
 *.avi
+# Rental app vehicle listing images (committed assets)
+!rental-app/src/images/
+!rental-app/src/images/**
 
 # Model weights
 *.onnx

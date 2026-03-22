@@ -1,1 +1,71 @@
+# Vercel
 .vercel
+
+# Dependencies
+node_modules/
+*.pnp
+.pnp.js
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Environment / secrets (never commit)
+*.env
+.env*
+!.env.example
+
+# AWS CDK
+cdk.out/
+*.zip
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+coverage/
+
+# Images / media (large binaries — use Git LFS if needed)
+*.jpg
+*.jpeg
+*.png
+*.mp4
+*.avi
+
+# Model weights
+*.onnx
+*.pt
+*.pth
+
+# Deployment artifacts
+DEPLOYMENT_STATUS.md

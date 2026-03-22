@@ -1,0 +1,19 @@
+# Vehicle detection and scan pipeline - Pi dependencies
+# Install: pip install -r requirements.txt
+#
+# ONNX Runtime for inference (no PyTorch needed on Pi).
+
+# Core detection
+opencv-python-headless>=4.5.0
+onnxruntime>=1.16.0
+numpy>=1.24.0
+
+# License plate OCR
+pytesseract>=0.3.10
+
+# S3 upload (optional — install if uploading to AWS)
+# boto3>=1.28.0
+
+# 3D reconstruction (GPU instance only, not for Pi)
+# nerfstudio>=1.0.0
+# gsplat>=0.1.0

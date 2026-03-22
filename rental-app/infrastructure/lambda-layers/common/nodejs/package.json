@@ -1,0 +1,15 @@
+{
+  "name": "ezcarrental-common-layer",
+  "version": "1.0.0",
+  "description": "Common dependencies for EZ Car Rental Lambda functions",
+  "dependencies": {
+    "aws-sdk": "^2.1691.0",
+    "pg": "^8.11.3",
+    "jsonwebtoken": "^9.0.2",
+    "jwk-to-pem": "^2.0.5",
+    "bcryptjs": "^2.4.3",
+    "uuid": "^9.0.1",
+    "axios": "^1.6.0",
+    "stripe": "^14.11.0"
+  }
+}

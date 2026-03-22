@@ -1,0 +1,12 @@
+# Camera system - Raspberry Pi edge layer
+# Install on Pi: pip install -r requirements.txt
+
+opencv-python-headless>=4.5.0   # USB cameras via V4L2 (headless = no GUI on Pi)
+boto3>=1.28.0                   # AWS S3 uploads
+fastapi>=0.104.0                # Trigger server HTTP API
+uvicorn>=0.24.0                 # ASGI server for FastAPI
+pydantic>=2.0.0                 # Request/response validation (bundled with FastAPI)
+pytest>=7.0                     # Unit tests: cd pi && python -m pytest tests/ -v
+pytest-asyncio>=0.23.0          # Async test support for upload_worker tests
+httpx>=0.25.0                   # Async test client for FastAPI
+# picamera2                     # Uncomment on Pi with CSI camera enabled

@@ -1,0 +1,57 @@
+name: Deployment Notifications
+
+on:
+  workflow_run:
+    workflows: ["AI Car Rental CI/CD Pipeline"]
+    types:
+      - completed
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion != 'skipped' }}
+    steps:
+      - name: Get workflow details
+        id: workflow
+        run: |
+          if [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
+            echo "status=✅ Success" >> $GITHUB_OUTPUT
+            echo "color=good" >> $GITHUB_OUTPUT
+          else
+            echo "status=❌ Failed" >> $GITHUB_OUTPUT  
+            echo "color=danger" >> $GITHUB_OUTPUT
+          fi
+          
+          case "${{ github.event.workflow_run.head_branch }}" in
+            "develop")
+              echo "environment=Development" >> $GITHUB_OUTPUT
+              ;;
+            "main")
+              echo "environment=Staging/Production" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "environment=Unknown" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Send notification (Console)
+        run: |
+          echo "🚀 EZ Car Rental Deployment Notification"
+          echo "Environment: ${{ steps.workflow.outputs.environment }}"
+          echo "Status: ${{ steps.workflow.outputs.status }}"
+          echo "Branch: ${{ github.event.workflow_run.head_branch }}"
+          echo "Commit: ${{ github.event.workflow_run.head_sha }}"
+          echo "Workflow: ${{ github.event.workflow_run.html_url }}"
+
+      # Uncomment and configure when Slack webhook is available
+      # - name: Send Slack notification
+      #   uses: 8398a7/action-slack@v3
+      #   with:
+      #     status: ${{ steps.workflow.outputs.status }}
+      #     channel: '#deployments'
+      #     text: |
+      #       EZ Car Rental deployment to ${{ steps.workflow.outputs.environment }}
+      #       Branch: ${{ github.event.workflow_run.head_branch }}
+      #       Status: ${{ steps.workflow.outputs.status }}
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

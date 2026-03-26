@@ -1,0 +1,10 @@
+Summary,Description,Epic,Estimate (hrs),Adjusted Estimate (hrs),Cost (USD)
+Build driver license scan + face match,Develop verification flow using SDK,Identity Verification Module,8,4.0,800.0
+Integrate soft credit check,Integrate Experian API to pull renter background info,Identity Verification Module,5,2.5,500.0
+Design 360 camera intake flow,Setup AWS S3 for storing intake videos/images,AI-Based Damage Detection,6,3.0,600.0
+Train AI damage detection model,Fine-tune YOLO/DINOv2 using image dataset,AI-Based Damage Detection,10,5.0,1000.0
+Setup booking UI,Frontend reservation system with car filter/search,Rental Booking System,8,4.0,800.0
+Integrate Stripe payments,Add Stripe with authorization and delayed capture,Rental Booking System,5,2.5,500.0
+Build admin reporting dashboard,Display damage logs and rentals per car,Admin Dashboard,7,3.5,700.0
+Configure AWS Amplify + Lambda,Deploy frontend/backend using AWS services,AWS Infrastructure Setup,6,3.0,600.0
+Implement SNS notifications,Set up SMS/email alerts using AWS SNS,AWS Infrastructure Setup,4,2.0,400.0

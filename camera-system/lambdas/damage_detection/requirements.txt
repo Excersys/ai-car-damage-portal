@@ -1,0 +1,2 @@
+# Bundled with Lambda runtime — listed for documentation
+boto3

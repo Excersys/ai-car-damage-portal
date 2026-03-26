@@ -1,0 +1,199 @@
+"""
+SQLite-backed persistent upload queue.
+Tracks images that failed immediate upload so the background worker
+can retry them when connectivity returns. Survives Pi reboots.
+"""
+
+from __future__ import annotations
+
+import logging
+import sqlite3
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+import config
+
+logger = logging.getLogger(__name__)
+
+_CREATE_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS upload_queue (
+    id          TEXT PRIMARY KEY,
+    event_id    TEXT NOT NULL,
+    camera_id   TEXT NOT NULL,
+    local_path  TEXT NOT NULL,
+    s3_key      TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'pending',
+    created_at  TEXT NOT NULL,
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    last_error  TEXT
+);
+"""
+
+_CREATE_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_status ON upload_queue (status);
+"""
+
+
+@dataclass
+class QueueItem:
+    """A single row from the upload queue."""
+
+    id: str
+    event_id: str
+    camera_id: str
+    local_path: str
+    s3_key: str
+    status: str
+    created_at: str
+    attempts: int
+    last_error: str | None
+
+
+@dataclass
+class QueueStats:
+    """Aggregate counts by status."""
+
+    pending: int = 0
+    uploading: int = 0
+    uploaded: int = 0
+    failed: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.pending + self.uploading + self.uploaded + self.failed
+
+
+class UploadQueue:
+    """Persistent queue backed by SQLite."""
+
+    def __init__(self, db_path: Path | None = None):
+        self._db_path = str(db_path or config.UPLOAD_QUEUE_DB)
+        self._ensure_dir()
+        self._init_db()
+
+    def _ensure_dir(self) -> None:
+        Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
+
+    def _conn(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self._db_path, timeout=5)
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+    def _init_db(self) -> None:
+        with self._conn() as conn:
+            conn.execute(_CREATE_TABLE_SQL)
+            conn.execute(_CREATE_INDEX_SQL)
+
+    def enqueue(self, event_id: str, camera_id: str, local_path: str, s3_key: str) -> str:
+        """Add one failed upload to the queue. Returns the queue item id."""
+        item_id = uuid.uuid4().hex[:16]
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO upload_queue
+                    (id, event_id, camera_id, local_path, s3_key, status, created_at)
+                VALUES (?, ?, ?, ?, ?, 'pending', ?)
+                """,
+                (item_id, event_id, camera_id, local_path, s3_key, now),
+            )
+        logger.info("Enqueued %s/%s for retry (id=%s)", event_id, camera_id, item_id)
+        return item_id
+
+    def enqueue_failures(self, event_id: str, s3_results: list) -> int:
+        """
+        Convenience: enqueue all failed S3Result items from an upload attempt.
+        Returns number of items enqueued.
+        """
+        count = 0
+        for r in s3_results:
+            if not r.success:
+                self.enqueue(event_id, r.camera_id, str(r.local_path), r.s3_key)
+                count += 1
+        return count
+
+    def dequeue_batch(self, batch_size: int = 10) -> list[QueueItem]:
+        """
+        Get the next batch of pending items and mark them as 'uploading'.
+        Returns list of QueueItem.
+        """
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, event_id, camera_id, local_path, s3_key,
+                       status, created_at, attempts, last_error
+                FROM upload_queue
+                WHERE status = 'pending'
+                ORDER BY created_at ASC
+                LIMIT ?
+                """,
+                (batch_size,),
+            ).fetchall()
+
+            items = [QueueItem(*row) for row in rows]
+            if items:
+                ids = [it.id for it in items]
+                placeholders = ",".join("?" * len(ids))
+                conn.execute(
+                    f"UPDATE upload_queue SET status = 'uploading' WHERE id IN ({placeholders})",
+                    ids,
+                )
+            return items
+
+    def mark_uploaded(self, item_id: str) -> None:
+        """Mark an item as successfully uploaded."""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE upload_queue SET status = 'uploaded' WHERE id = ?",
+                (item_id,),
+            )
+
+    def mark_failed(self, item_id: str, error: str) -> None:
+        """Mark an item as failed and increment the attempt counter."""
+        with self._conn() as conn:
+            conn.execute(
+                """
+                UPDATE upload_queue
+                SET status = 'pending', attempts = attempts + 1, last_error = ?
+                WHERE id = ?
+                """,
+                (error, item_id),
+            )
+
+    def stats(self) -> QueueStats:
+        """Return aggregate counts by status."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT status, COUNT(*) FROM upload_queue GROUP BY status"
+            ).fetchall()
+        s = QueueStats()
+        for status, count in rows:
+            if hasattr(s, status):
+                setattr(s, status, count)
+        return s
+
+    def cleanup_uploaded(self, delete_files: bool = True) -> int:
+        """
+        Remove entries with status='uploaded' and optionally delete local files.
+        Returns number of entries removed.
+        """
+        with self._conn() as conn:
+            if delete_files:
+                rows = conn.execute(
+                    "SELECT local_path FROM upload_queue WHERE status = 'uploaded'"
+                ).fetchall()
+                for (path_str,) in rows:
+                    p = Path(path_str)
+                    if p.exists():
+                        p.unlink()
+                        logger.debug("Deleted local file %s", p)
+
+            cursor = conn.execute(
+                "DELETE FROM upload_queue WHERE status = 'uploaded'"
+            )
+            removed = cursor.rowcount
+            if removed:
+                logger.info("Cleaned up %d uploaded queue entries", removed)
+            return removed

@@ -1,0 +1,35 @@
+[Unit]
+Description=Tunnel Vehicle Detection Daemon
+Documentation=https://github.com/your-org/ai-car-rental
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/camera-system/model
+EnvironmentFile=/etc/tunnel-detect/tunnel-detect.env
+ExecStart=/home/pi/camera-system/pi/.venv/bin/python3 /home/pi/camera-system/model/detect_daemon.py
+
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tunnel-detect
+
+# Watchdog: uncomment after installing python3-systemd on Pi
+# WatchdogSec=120
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/data/tunnel/events
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

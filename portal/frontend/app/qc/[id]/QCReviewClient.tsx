@@ -44,7 +44,7 @@ export default function QCReviewClient({ scan, car }: QCReviewClientProps) {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Review: {car.make} {car.model}</h1>
-            <p className="text-sm text-gray-500">Scan ID: {scan.id} • Confidence: {(scan.detectedDamage?.[0]?.confidence ?? 0 * 100).toFixed(0)}%</p>
+            <p className="text-sm text-gray-500">Scan ID: {scan.id} • Confidence: {(Number(scan.detectedDamage?.[0]?.confidence ?? 0) * 100).toFixed(0)}%</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -97,7 +97,7 @@ export default function QCReviewClient({ scan, car }: QCReviewClientProps) {
                             width: `${(box.width / 800) * 100}%`,
                             height: `${(box.height / 600) * 100}%`,
                         }}
-                        title={`${box.label} (${(box.confidence * 100).toFixed(0)}%)`}
+                        title={`${box.label} (${(Number(box.confidence) * 100).toFixed(0)}%)`}
                     >
                         <span className="absolute -top-6 left-0 bg-red-500 text-white text-xs px-1 py-0.5 rounded">
                             {box.label}

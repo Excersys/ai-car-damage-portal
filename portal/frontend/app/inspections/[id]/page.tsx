@@ -1,9 +1,8 @@
 import { getScanById, getCarById } from "@/lib/actions";
 import InspectionDetailClient from "./InspectionDetailClient";
-import { use } from "react";
 
 export default async function InspectionDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+  const { id } = await params;
   const scan = await getScanById(id);
   
   if (!scan) return <div className="p-8 text-center">Record not found</div>;

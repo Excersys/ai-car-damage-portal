@@ -90,7 +90,7 @@ export default function CustomerReportClient({ scan, car }: CustomerReportClient
                                             <span className="w-2 h-2 bg-red-500 rounded-full" />
                                             {damage.label} on Front Bumper
                                         </span>
-                                        <span className="text-gray-500">Confidence: {(damage.confidence * 100).toFixed(0)}%</span>
+                                        <span className="text-gray-500">Confidence: {(Number(damage.confidence) * 100).toFixed(0)}%</span>
                                     </li>
                                 ))}
                             </ul>

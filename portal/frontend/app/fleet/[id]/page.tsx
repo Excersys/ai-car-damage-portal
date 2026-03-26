@@ -1,17 +1,14 @@
-"use client";
-
 import { getCarById, getReservationsByCarId, getScansByCarId } from "@/lib/actions";
 import { Reservation, ScanEvent } from "@/types";
 import Link from "next/link";
 import { ArrowLeft, Calendar, ShieldCheck, AlertTriangle, History } from "lucide-react";
-import { use } from "react";
 
 type TimelineEvent = 
   | { type: 'reservation'; date: string; data: Reservation; id: string }
   | { type: 'scan'; date: string; data: ScanEvent; id: string };
 
 export default async function CarDetail({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+  const { id } = await params;
   const car = await getCarById(id);
   
   if (!car) return <div className="p-8">Car not found</div>;

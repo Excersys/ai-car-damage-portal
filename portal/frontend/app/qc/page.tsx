@@ -52,7 +52,7 @@ export default async function QCQueue() {
                         </p>
                         <p className="mt-1 text-xs text-red-600 font-medium flex items-center gap-1">
                           <AlertTriangle className="h-3 w-3" />
-                          AI Confidence: {(scan.detectedDamage?.[0]?.confidence ?? 0 * 100).toFixed(0)}%
+                          AI Confidence: {(Number(scan.detectedDamage?.[0]?.confidence ?? 0) * 100).toFixed(0)}%
                         </p>
                       </div>
                     </div>

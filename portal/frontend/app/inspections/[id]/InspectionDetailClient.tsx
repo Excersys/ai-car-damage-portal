@@ -70,7 +70,7 @@ export default function InspectionDetailClient({ scan, carId }: InspectionDetail
                 >
                     <div className="absolute -top-8 left-0 bg-white p-2 rounded shadow text-xs whitespace-nowrap z-10">
                         <p className="font-bold text-red-600">{box.label}</p>
-                        <p className="text-gray-500">Conf: {(box.confidence * 100).toFixed(0)}%</p>
+                        <p className="text-gray-500">Conf: {(Number(box.confidence) * 100).toFixed(0)}%</p>
                     </div>
                 </div>
             ))}

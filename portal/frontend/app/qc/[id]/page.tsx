@@ -1,9 +1,8 @@
 import { getScanById, getCarById } from "@/lib/actions";
 import QCReviewClient from "./QCReviewClient";
-import { use } from "react";
 
 export default async function QCReviewPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+  const { id } = await params;
   const scan = await getScanById(id);
   
   if (!scan) return <div className="p-8">Scan not found</div>;

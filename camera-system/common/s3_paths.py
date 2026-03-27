@@ -13,6 +13,14 @@ from __future__ import annotations
 
 import re
 
+# Root path segment for all tunnel JPEG uploads (Pi, detect_daemon, queue worker).
+# Must match ``parts[0] == "scans"`` in damage_detection handler and the S3 event
+# filter in infra/stacks/inference_stack.py.
+CANONICAL_SCAN_ROOT = "scans"
+
+# Prefix passed to S3 ObjectCreated notification filter (includes trailing slash).
+INFERENCE_S3_NOTIFICATION_PREFIX = f"{CANONICAL_SCAN_ROOT}/"
+
 # Safe path segment: alphanumerics only, bounded length (S3 key sanity).
 _MAX_PLATE_LEN = 32
 _PLATE_CLEAN = re.compile(r"[^A-Z0-9]+")
@@ -40,10 +48,13 @@ def scan_frame_key(
 ) -> str:
     """Full S3 object key for one JPEG frame."""
     plate = normalize_plate_segment(license_plate)
-    return f"scans/{plate}/{event_id}/{camera_id}/frame_{frame_index:04d}.jpg"
+    return (
+        f"{CANONICAL_SCAN_ROOT}/{plate}/{event_id}/"
+        f"{camera_id}/frame_{frame_index:04d}.jpg"
+    )
 
 
 def scan_prefix(license_plate: str | None, event_id: str) -> str:
     """Directory-style prefix (no trailing slash) for a scan event."""
     plate = normalize_plate_segment(license_plate)
-    return f"scans/{plate}/{event_id}"
+    return f"{CANONICAL_SCAN_ROOT}/{plate}/{event_id}"

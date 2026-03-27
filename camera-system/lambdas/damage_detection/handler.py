@@ -7,6 +7,9 @@ and writes structured results to DynamoDB.
 
 Expected S3 key format:
     scans/{license_plate}/{event_id}/{camera_id}/frame_NNNN.jpg
+
+Canonical root segment matches ``common.s3_paths.CANONICAL_SCAN_ROOT`` and CDK
+``INFERENCE_S3_NOTIFICATION_PREFIX`` (see ``infra/stacks/inference_stack.py``).
 """
 
 from __future__ import annotations

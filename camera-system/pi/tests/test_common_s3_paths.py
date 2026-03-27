@@ -1,6 +1,12 @@
 """Tests for shared S3 path helpers."""
 
-from common.s3_paths import normalize_plate_segment, scan_frame_key, scan_prefix
+from common.s3_paths import (
+    CANONICAL_SCAN_ROOT,
+    INFERENCE_S3_NOTIFICATION_PREFIX,
+    normalize_plate_segment,
+    scan_frame_key,
+    scan_prefix,
+)
 
 
 def test_normalize_empty():
@@ -20,3 +26,10 @@ def test_scan_frame_key():
 
 def test_scan_prefix():
     assert scan_prefix(None, "e1") == "scans/unknown/e1"
+
+
+def test_frame_keys_match_inference_notification_prefix():
+    """Lambda S3 trigger uses the same root as producers (ACR-129)."""
+    assert INFERENCE_S3_NOTIFICATION_PREFIX == f"{CANONICAL_SCAN_ROOT}/"
+    key = scan_frame_key("X", "ev", "cam", 0)
+    assert key.startswith(INFERENCE_S3_NOTIFICATION_PREFIX)

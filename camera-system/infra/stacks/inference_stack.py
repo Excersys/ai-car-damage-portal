@@ -3,6 +3,18 @@ Inference stack: DamageDetection Lambda triggered by S3 ObjectCreated events.
 Invokes a SageMaker endpoint and writes results to DynamoDB.
 """
 
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Repo root ``camera-system`` (for shared path constants).
+_CS_ROOT = Path(__file__).resolve().parents[2]
+if str(_CS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_CS_ROOT))
+
+from common.s3_paths import INFERENCE_S3_NOTIFICATION_PREFIX
+
 from constructs import Construct
 import aws_cdk as cdk
 from aws_cdk import (
@@ -76,5 +88,8 @@ class InferenceStack(cdk.Stack):
         image_bucket.add_event_notification(
             s3.EventType.OBJECT_CREATED,
             s3n.LambdaDestination(self.damage_detection_fn),
-            s3.NotificationKeyFilter(prefix="scans/", suffix=".jpg"),
+            s3.NotificationKeyFilter(
+                prefix=INFERENCE_S3_NOTIFICATION_PREFIX,
+                suffix=".jpg",
+            ),
         )

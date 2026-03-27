@@ -35,7 +35,7 @@ Automated pipeline that detects when a car enters a tunnel, captures images from
 | `lambdas/review_api/` | Lambda: GET /tunnel/events/{event_id} |
 | `model/` | SageMaker model deployment script + config |
 | `scripts/` | Simulation and E2E test scripts |
-| `docs/` | PRD and Raspberry Pi setup guides |
+| `docs/` | PRD, Pi setup guides, [sprint QA checklist (Pi)](docs/SPRINT_QA_CHECKLIST_RASPBERRY_PI.md) |
 
 ## Quick Start
 

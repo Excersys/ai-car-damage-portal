@@ -35,6 +35,19 @@ interface UserInfo {
   licenseNumber: string
 }
 
+/** Driver age for confirmation summary from ISO or form date string. */
+function driverAgeFromDob(dob: string): number {
+  const trimmed = (dob || '').trim()
+  if (!trimmed) return 30
+  const birth = new Date(trimmed)
+  if (Number.isNaN(birth.getTime())) return 30
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const mo = today.getMonth() - birth.getMonth()
+  if (mo < 0 || (mo === 0 && today.getDate() < birth.getDate())) age -= 1
+  return Math.max(18, age)
+}
+
 const BookingFormPage: React.FC = () => {
   const { carId } = useParams()
   const navigate = useNavigate()
@@ -275,19 +288,52 @@ const BookingFormPage: React.FC = () => {
   }
 
   const handleCompleteBooking = (paymentData: any) => {
+    if (!car) return
     const bookingId = 'BK' + Date.now()
+    const days = calculateDays()
+    const basePrice =
+      car.price * days +
+      selectedOptions.reduce((t, o) => t + o.price * days, 0)
+    const insurance = insuranceOptions.find(opt => opt.id === selectedInsurance)
+    const insurancePrice = insurance ? insurance.price * days : 0
+    const addOnsPrice = additionalOptions.reduce((total, optionId) => {
+      const option = rentalOptions.find(opt => opt.id === optionId)
+      return total + (option ? option.price * days : 0)
+    }, 0)
+    const taxes = 0
+    const total = calculateTotalPrice()
+
+    const returnLocation = bookingDetails.allowDifferentDropoff
+      ? bookingDetails.dropoffLocation
+      : bookingDetails.pickupLocation
+
     navigate(`/booking-confirmation/${bookingId}`, {
       state: {
         bookingId,
         car,
-        bookingDetails,
+        booking: {
+          pickupDate: bookingDetails.pickupDate,
+          returnDate: bookingDetails.dropoffDate,
+          pickupTime: bookingDetails.pickupTime,
+          returnTime: bookingDetails.dropoffTime,
+          driverAge: driverAgeFromDob(userInfo.dateOfBirth),
+          pickupLocation: bookingDetails.pickupLocation,
+          returnLocation,
+          insuranceType: selectedInsurance || 'basic',
+          addOns: [...additionalOptions, ...selectedOptions.map(o => o.id)],
+        },
+        pricing: {
+          basePrice,
+          insurancePrice,
+          addOnsPrice,
+          taxes,
+          total,
+        },
+        totalDays: days,
         userInfo,
-        selectedInsurance,
-        additionalOptions,
-        selectedOptions,
-        totalPrice: calculateTotalPrice(),
-        paymentData
-      }
+        bookingDetails,
+        paymentData,
+      },
     })
   }
 

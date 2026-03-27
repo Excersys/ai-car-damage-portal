@@ -1,14 +1,21 @@
 import React from 'react'
 import { useLocation, useParams, Link } from 'react-router-dom'
 
+function humanizeAddonId(id: string): string {
+  return id
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .trim()
+}
+
 const BookingConfirmationPage: React.FC = () => {
   const location = useLocation()
-  const { bookingId } = useParams()
-  
-  // Get booking data from navigation state
+  const { bookingId: bookingIdParam } = useParams()
+
   const { booking, car, pricing, totalDays, bookingId: confirmationId } = location.state || {}
 
-  if (!booking || !car) {
+  if (!booking || !car || !pricing || totalDays == null) {
     return (
       <div className="booking-confirmation-page">
         <div className="container">
@@ -29,17 +36,34 @@ const BookingConfirmationPage: React.FC = () => {
   ]
 
   const insuranceOptions = [
-    { id: 'basic', name: 'Basic Coverage', price: 15, description: 'Covers collision and theft' },
-    { id: 'premium', name: 'Premium Coverage', price: 25, description: 'Full coverage including personal injury' },
-    { id: 'ultimate', name: 'Ultimate Coverage', price: 35, description: 'Zero deductible, roadside assistance' }
+    { id: 'basic', name: 'Basic Protection', price: 15, description: 'Collision Damage Waiver with deductible' },
+    { id: 'standard', name: 'Standard Protection', price: 25, description: 'CDW + theft protection' },
+    { id: 'premium', name: 'Premium Protection', price: 35, description: 'Zero deductible + personal accident coverage' },
   ]
 
   const addOnOptions = [
     { id: 'gps', name: 'GPS Navigation', price: 8, description: 'Turn-by-turn navigation system' },
     { id: 'wifi', name: 'Mobile WiFi', price: 12, description: 'Stay connected on the road' },
+    { id: 'mobile-wifi', name: 'Mobile WiFi Hotspot', price: 10, description: 'High-speed internet for multiple devices' },
     { id: 'child-seat', name: 'Child Safety Seat', price: 15, description: 'For children 2-8 years old' },
-    { id: 'additional-driver', name: 'Additional Driver', price: 20, description: 'Add a second authorized driver' }
+    { id: 'childSeat', name: 'Child Car Seat', price: 12, description: 'Safety-certified child seat' },
+    { id: 'boosterSeat', name: 'Booster Seat', price: 8, description: 'For children 4-8 years old' },
+    { id: 'additional-driver', name: 'Additional Driver', price: 20, description: 'Add a second authorized driver' },
+    { id: 'extraDriver', name: 'Additional Driver', price: 15, description: 'Add a second authorized driver' },
+    { id: 'roadside', name: '24/7 Roadside Assistance', price: 6, description: 'Emergency towing and support' },
   ]
+
+  const addOnIds = booking.addOns ?? []
+  const bookingReference = bookingIdParam || confirmationId || '—'
+
+  const pickupPlace = locations.find(l => l.id === booking.pickupLocation)
+  const returnPlace = locations.find(l => l.id === booking.returnLocation)
+  const pickupName = pickupPlace?.name ?? String(booking.pickupLocation)
+  const pickupAddress = pickupPlace?.address ?? ''
+  const returnName = returnPlace?.name ?? String(booking.returnLocation)
+  const returnAddress = returnPlace?.address ?? ''
+
+  const insuranceMeta = insuranceOptions.find(opt => opt.id === booking.insuranceType)
 
   const handleDownloadReceipt = () => {
     // In real app, this would generate a PDF
@@ -59,7 +83,7 @@ const BookingConfirmationPage: React.FC = () => {
           <h1>Booking Confirmed!</h1>
           <p>Your reservation has been successfully created</p>
           <div className="booking-reference">
-            <span>Booking Reference: <strong>{confirmationId}</strong></span>
+            <span>Booking Reference: <strong>{bookingReference}</strong></span>
           </div>
         </div>
 
@@ -125,21 +149,13 @@ const BookingConfirmationPage: React.FC = () => {
               <div className="location-details">
                 <div className="location-card">
                   <h4>📍 Pickup Location</h4>
-                  <p className="location-name">
-                    {locations.find(l => l.id === booking.pickupLocation)?.name}
-                  </p>
-                  <p className="location-address">
-                    {locations.find(l => l.id === booking.pickupLocation)?.address}
-                  </p>
+                  <p className="location-name">{pickupName}</p>
+                  {pickupAddress ? <p className="location-address">{pickupAddress}</p> : null}
                 </div>
                 <div className="location-card">
                   <h4>📍 Return Location</h4>
-                  <p className="location-name">
-                    {locations.find(l => l.id === booking.returnLocation)?.name}
-                  </p>
-                  <p className="location-address">
-                    {locations.find(l => l.id === booking.returnLocation)?.address}
-                  </p>
+                  <p className="location-name">{returnName}</p>
+                  {returnAddress ? <p className="location-address">{returnAddress}</p> : null}
                 </div>
               </div>
             </div>
@@ -150,23 +166,27 @@ const BookingConfirmationPage: React.FC = () => {
               <div className="services-list">
                 <div className="service-item">
                   <h4>🛡️ Insurance Coverage</h4>
-                  <p>{insuranceOptions.find(opt => opt.id === booking.insuranceType)?.name}</p>
+                  <p>{insuranceMeta?.name ?? humanizeAddonId(String(booking.insuranceType || ''))}</p>
                   <span className="service-description">
-                    {insuranceOptions.find(opt => opt.id === booking.insuranceType)?.description}
+                    {insuranceMeta?.description ?? ''}
                   </span>
                 </div>
-                {booking.addOns.length > 0 && (
+                {addOnIds.length > 0 && (
                   <div className="service-item">
                     <h4>➕ Additional Services</h4>
                     <ul className="addon-list">
-                      {booking.addOns.map((addOnId: string) => {
+                      {addOnIds.map((addOnId: string) => {
                         const addOn = addOnOptions.find(opt => opt.id === addOnId)
-                        return addOn ? (
+                        return (
                           <li key={addOnId}>
-                            <span className="addon-name">{addOn.name}</span>
-                            <span className="addon-description">{addOn.description}</span>
+                            <span className="addon-name">
+                              {addOn ? addOn.name : humanizeAddonId(addOnId)}
+                            </span>
+                            <span className="addon-description">
+                              {addOn?.description ?? ''}
+                            </span>
                           </li>
-                        ) : null
+                        )
                       })}
                     </ul>
                   </div>

@@ -45,6 +45,14 @@ SERVER_PORT: int = int(os.environ.get("SERVER_PORT", "8000"))
 
 LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")
 
+# License plate segment for S3 keys (scans/{plate}/...). OCR optional; see s3_uploader.
+TUNNEL_LICENSE_PLATE: str = os.environ.get("TUNNEL_LICENSE_PLATE", "").strip()
+PI_PLATE_OCR: bool = os.environ.get("PI_PLATE_OCR", "").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
 # ---------------------------------------------------------------------------
 # Network (RTSP) camera settings
 # ---------------------------------------------------------------------------

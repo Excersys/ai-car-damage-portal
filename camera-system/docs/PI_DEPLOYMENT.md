@@ -248,6 +248,21 @@ curl -X POST http://localhost:8000/trigger/manual
 curl http://localhost:8000/queue/status
 ```
 
+### S3 key layout and license plate segment
+
+Uploads use the same convention as the RTSP `detect_daemon` + `scan_uploader` path so the damage-detection Lambda parses one shape:
+
+`scans/{license_plate}/{event_id}/{camera_id}/frame_0000.jpg`
+
+Shared helpers live in `camera-system/common/s3_paths.py`. Deploy **both** `pi/` and `common/` onto the Pi (keep the parent `camera-system` folder layout).
+
+| Environment variable | Purpose |
+|---------------------|---------|
+| `TUNNEL_LICENSE_PLATE` | Static plate segment when OCR is off or fails (e.g. test lane). Normalized to A–Z / 0–9. |
+| `PI_PLATE_OCR` | If `1` / `true`, try `model/plate_reader.py` (Tesseract) on the first successful capture frame. Requires `model/` on `PYTHONPATH` and OCR dependencies. |
+
+If neither is set, the segment defaults to `unknown`.
+
 ## 7. Troubleshooting
 
 | Symptom | Likely Cause | Fix |

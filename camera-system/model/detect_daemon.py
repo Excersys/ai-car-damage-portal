@@ -8,6 +8,13 @@ for full front/side/rear coverage as the car drives through.
 
 State machine (global):
     SCANNING ──(vehicle on any cam)──▶ BURST ──(done/timeout)──▶ COOLDOWN ──▶ SCANNING
+
+Pipeline alignment (Lean MVP / ACR-155):
+    The Raspberry Pi ``trigger_server`` path and this daemon both upload under
+    ``scans/{plate}/{event_id}/{camera_id}/frame_NNNN.jpg`` — see
+    ``common/s3_paths.py`` and ``scan_uploader.upload_scan`` (used after
+    ``_try_read_plate``). Configure the Pi edge with the same bucket/region so
+    damage-detection Lambda sees a single key layout.
 """
 
 from __future__ import annotations

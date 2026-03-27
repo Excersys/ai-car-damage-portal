@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 import config
 from camera_discover import discover_all
 from capture_service import CaptureResult, capture_all, generate_event_id
-from s3_uploader import check_connectivity, s3_key_for, upload_event
+from s3_uploader import check_connectivity, upload_event
 from upload_queue import UploadQueue
 from upload_worker import UploadWorker
 

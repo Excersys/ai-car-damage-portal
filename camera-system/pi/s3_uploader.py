@@ -7,6 +7,7 @@ so the happy path stays fast. Returns per-image success/failure.
 from __future__ import annotations
 
 import logging
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,11 @@ from botocore.config import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError
 
 import config
+
+_camera_system_root = Path(__file__).resolve().parent.parent
+if str(_camera_system_root) not in sys.path:
+    sys.path.insert(0, str(_camera_system_root))
+from common.s3_paths import scan_frame_key
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +55,53 @@ class S3Result:
     error: str = ""
 
 
-def s3_key_for(event_id: str, camera_id: str) -> str:
-    """Build the S3 object key matching the scans/ prefix expected by the
-    inference Lambda trigger (see ``inference_stack.py``)."""
-    return f"scans/unknown/{event_id}/{camera_id}/frame_0000.jpg"
+def _resolve_license_plate(captures: list) -> str | None:
+    """
+    Best-effort plate for S3 path segment: OCR (optional) then TUNNEL_LICENSE_PLATE.
+    Returns None to normalize as ``unknown``.
+    """
+    if config.PI_PLATE_OCR:
+        first = next((c for c in captures if getattr(c, "success", False)), None)
+        if first is not None and getattr(first, "local_path", None):
+            model_dir = _camera_system_root / "model"
+            if str(model_dir) not in sys.path:
+                sys.path.insert(0, str(model_dir))
+            try:
+                import cv2
+                from plate_reader import read_plate
+
+                frame = cv2.imread(str(first.local_path))
+                if frame is not None:
+                    plate = read_plate(frame)
+                    if plate:
+                        return plate
+            except Exception as exc:
+                logger.debug("Pi plate OCR unavailable or failed: %s", exc)
+
+    if config.TUNNEL_LICENSE_PLATE:
+        return config.TUNNEL_LICENSE_PLATE
+    return None
+
+
+def s3_key_for(
+    event_id: str,
+    camera_id: str,
+    *,
+    license_plate: str | None = None,
+    frame_index: int = 0,
+) -> str:
+    """S3 object key for one frame; matches damage_detection Lambda parsing."""
+    return scan_frame_key(license_plate, event_id, camera_id, frame_index)
+
+
+def s3_keys_for_event(event_id: str, captures: list) -> dict[str, str]:
+    """Map camera_id -> S3 key using one shared plate for the event."""
+    plate = _resolve_license_plate(captures)
+    return {
+        cap.camera_id: scan_frame_key(plate, event_id, cap.camera_id, 0)
+        for cap in captures
+        if cap.success
+    }
 
 
 def upload_image(
@@ -105,10 +154,12 @@ def upload_event(
 
     results: list[S3Result] = []
 
+    key_by_cam = s3_keys_for_event(event_id, to_upload)
+
     with ThreadPoolExecutor(max_workers=len(to_upload)) as pool:
         futures = {}
         for cap in to_upload:
-            s3_key = s3_key_for(event_id, cap.camera_id)
+            s3_key = key_by_cam[cap.camera_id]
             fut = pool.submit(
                 upload_image, cap.local_path, s3_key, cap.camera_id, event_id
             )
@@ -124,7 +175,7 @@ def upload_event(
                     S3Result(
                         camera_id=cid,
                         local_path=Path(""),
-                        s3_key=s3_key_for(event_id, cid),
+                        s3_key=key_by_cam.get(cid, s3_key_for(event_id, cid)),
                         success=False,
                         error=str(exc),
                     )

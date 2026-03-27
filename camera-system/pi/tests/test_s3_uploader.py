@@ -13,8 +13,14 @@ from s3_uploader import S3Result, check_connectivity, s3_key_for, upload_event, 
 
 
 class TestS3KeyFor:
-    def test_format(self):
+    def test_format_unknown_plate(self):
         assert s3_key_for("evt123", "usb_0") == "scans/unknown/evt123/usb_0/frame_0000.jpg"
+
+    def test_format_normalized_plate(self):
+        assert (
+            s3_key_for("evt123", "usb_0", license_plate="ab-1234")
+            == "scans/AB1234/evt123/usb_0/frame_0000.jpg"
+        )
 
 
 class TestUploadImage:

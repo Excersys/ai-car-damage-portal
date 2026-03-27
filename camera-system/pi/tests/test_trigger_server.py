@@ -4,7 +4,7 @@ All capture, upload, and queue operations are mocked.
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,8 +16,8 @@ from s3_uploader import S3Result
 @pytest.fixture
 def client():
     with patch("trigger_server.worker") as mock_worker:
-        mock_worker.start = MagicMock()
-        mock_worker.stop = MagicMock()
+        mock_worker.start = AsyncMock()
+        mock_worker.stop = AsyncMock()
         from trigger_server import app
 
         with TestClient(app) as c:

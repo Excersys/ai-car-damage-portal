@@ -14,9 +14,15 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
+
+_camera_system_root = Path(__file__).resolve().parent.parent
+if str(_camera_system_root) not in sys.path:
+    sys.path.insert(0, str(_camera_system_root))
+from common.s3_paths import scan_prefix
 
 logger = logging.getLogger("tunnel-detect.upload")
 
@@ -76,10 +82,10 @@ def _upload_one(local_path: Path, s3_key: str) -> UploadResult:
 
 
 def build_s3_prefix(scan_dict: dict) -> str:
-    """Build the S3 prefix for a scan event."""
-    plate = scan_dict.get("license_plate", "") or "unknown"
+    """Build the S3 prefix for a scan event (same layout as Pi uploads)."""
+    plate = scan_dict.get("license_plate") or None
     event_id = scan_dict["event_id"]
-    return f"scans/{plate}/{event_id}"
+    return scan_prefix(plate, event_id)
 
 
 def upload_scan(scan) -> list[UploadResult]:

@@ -72,7 +72,8 @@ def main() -> int:
 
     print("3. Cleaning up test data...")
     s3.delete_object(Bucket=S3_BUCKET, Key=s3_key)
-    table.delete_item(Key={"event_id": event_id, "camera_id": f"{camera_id}#frame_0000"})
+    camera_frame = f"{camera_id}#frame_0000"
+    table.delete_item(Key={"event_id": event_id, "camera_frame": camera_frame})
     print("   Cleaned up.")
     print()
 

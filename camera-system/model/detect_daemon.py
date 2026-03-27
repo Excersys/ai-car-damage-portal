@@ -9,12 +9,13 @@ for full front/side/rear coverage as the car drives through.
 State machine (global):
     SCANNING ──(vehicle on any cam)──▶ BURST ──(done/timeout)──▶ COOLDOWN ──▶ SCANNING
 
-Pipeline alignment (Lean MVP / ACR-155):
-    The Raspberry Pi ``trigger_server`` path and this daemon both upload under
-    ``scans/{plate}/{event_id}/{camera_id}/frame_NNNN.jpg`` — see
-    ``common/s3_paths.py`` and ``scan_uploader.upload_scan`` (used after
-    ``_try_read_plate``). Configure the Pi edge with the same bucket/region so
-    damage-detection Lambda sees a single key layout.
+Unified pipeline (ACR-155):
+    Both the Pi ``trigger_server`` and this daemon push uploads into a shared
+    SQLite queue (``pi/upload_queue.UploadQueue``).  The trigger_server's
+    ``UploadWorker`` is the single S3 drain — the daemon is a producer only.
+    S3 keys follow ``scans/{plate}/{event_id}/{camera_id}/frame_NNNN.jpg``
+    via ``common/s3_paths``.  Set ``USE_UPLOAD_QUEUE=0`` to fall back to the
+    legacy ``scan_uploader`` direct-upload path.
 """
 
 from __future__ import annotations
@@ -356,15 +357,65 @@ def _try_read_plate(scan: ScanEvent) -> None:
         logger.exception("Plate reader failed")
 
 
-def _try_upload_to_s3(scan: ScanEvent) -> None:
-    """Upload burst images to S3 if configured."""
+_USE_UPLOAD_QUEUE: bool = os.environ.get("USE_UPLOAD_QUEUE", "1").lower() in (
+    "1", "true", "yes",
+)
+
+_UPLOAD_QUEUE_DB: str = os.environ.get(
+    "UPLOAD_QUEUE_DB", "/data/tunnel/queue.db"
+)
+
+_UPLOAD_MAX_RETRIES: int = int(os.environ.get("UPLOAD_MAX_RETRIES", "5"))
+
+
+def _try_enqueue_to_s3(scan: ScanEvent) -> None:
+    """Enqueue burst images into the shared SQLite upload queue.
+
+    Falls back to the legacy ``scan_uploader`` direct upload when the
+    ``USE_UPLOAD_QUEUE`` env var is falsy (rollback lever).
+    """
+    if not _USE_UPLOAD_QUEUE:
+        try:
+            from scan_uploader import upload_scan
+            upload_scan(scan)
+        except ImportError:
+            logger.debug("scan_uploader not available, skipping S3 upload")
+        except Exception:
+            logger.exception("S3 upload (legacy) failed")
+        return
+
     try:
-        from scan_uploader import upload_scan
-        upload_scan(scan)
-    except ImportError:
-        logger.debug("scan_uploader not available, skipping S3 upload")
+        _pi_root = Path(__file__).resolve().parent.parent / "pi"
+        if str(_pi_root) not in sys.path:
+            sys.path.insert(0, str(_pi_root))
+
+        _cs_root = Path(__file__).resolve().parent.parent
+        if str(_cs_root) not in sys.path:
+            sys.path.insert(0, str(_cs_root))
+
+        from upload_queue import UploadQueue
+        from common.s3_paths import scan_frame_key, scan_prefix
+
+        plate = scan.license_plate or None
+        frames: list[tuple[str, str, str]] = []
+        for bf in scan.frames:
+            local = str(bf.path)
+            s3_key = scan_frame_key(plate, scan.event_id, bf.camera_id, bf.frame_index)
+            frames.append((bf.camera_id, local, s3_key))
+
+        event_json_path = str(scan.event_dir / "event.json")
+        event_json_s3_key = f"{scan_prefix(plate, scan.event_id)}/event.json"
+
+        queue = UploadQueue(db_path=_UPLOAD_QUEUE_DB, max_retries=_UPLOAD_MAX_RETRIES)
+        count = queue.enqueue_scan(
+            scan.event_id,
+            frames,
+            event_json_path=event_json_path,
+            event_json_s3_key=event_json_s3_key,
+        )
+        logger.info("Enqueued %d items for %s into upload queue", count, scan.event_id)
     except Exception:
-        logger.exception("S3 upload failed")
+        logger.exception("Failed to enqueue scan to upload queue")
 
 
 def _try_save_results(scan: ScanEvent) -> None:
@@ -438,13 +489,16 @@ def handle_vehicle_entry(
 
     # Post-burst pipeline
     _try_read_plate(scan)
-    _try_upload_to_s3(scan)
-    _try_save_results(scan)
-    _try_generate_viewer(scan)
 
-    # Save event metadata
+    # Write event.json to disk *before* enqueue so the queue entry
+    # references a file that already exists.
     meta_path = scan.event_dir / "event.json"
     meta_path.write_text(json.dumps(scan.to_dict(), indent=2))
+
+    _try_save_results(scan)
+    _try_generate_viewer(scan)
+    _try_enqueue_to_s3(scan)
+
     logger.info("Scan complete: %s  frames=%d  plate=%s",
                 event_id, len(scan.frames), scan.license_plate or "unknown")
 

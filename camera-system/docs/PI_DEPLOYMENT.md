@@ -128,6 +128,11 @@ BURST_MAX_DURATION=15
 BURST_EXIT_MISSES=3
 SCAN_RESULTS_DIR=/data/tunnel/scans
 
+# Unified pipeline (ACR-155)
+# Both trigger_server and detect_daemon share this queue DB.
+# Set USE_UPLOAD_QUEUE=0 on detect_daemon to revert to direct S3 upload.
+USE_UPLOAD_QUEUE=1
+
 # SageMaker (only needed if running deploy_endpoint.py from the Pi)
 # MODEL_ARTIFACT_S3_URI=s3://your-bucket/model.tar.gz
 # SAGEMAKER_IMAGE_URI=<framework-container-uri>
@@ -262,6 +267,42 @@ Shared helpers live in `camera-system/common/s3_paths.py`. Deploy **both** `pi/`
 | `PI_PLATE_OCR` | If `1` / `true`, try `model/plate_reader.py` (Tesseract) on the first successful capture frame. Requires `model/` on `PYTHONPATH` and OCR dependencies. |
 
 If neither is set, the segment defaults to `unknown`.
+
+### Unified upload pipeline (ACR-155)
+
+Both the **trigger server** (HTTP-triggered captures) and the **detection daemon** (RTSP burst captures) push uploads into a single SQLite-backed queue. The trigger server's `UploadWorker` is the sole S3 drain — the daemon is a producer only.
+
+```
+┌──────────────────┐      ┌──────────────────┐
+│  trigger_server   │      │  detect_daemon    │
+│  (HTTP capture)   │      │  (RTSP burst)     │
+└────────┬─────────┘      └────────┬──────────┘
+         │  enqueue()               │  enqueue_scan()
+         ▼                          ▼
+    ┌────────────────────────────────────┐
+    │   UploadQueue (SQLite WAL mode)    │
+    │   /data/tunnel/queue.db            │
+    └──────────────┬─────────────────────┘
+                   │  dequeue_batch()
+                   ▼
+          ┌─────────────────┐
+          │  UploadWorker   │
+          │  (async drain)  │
+          └────────┬────────┘
+                   │  upload to S3
+                   ▼
+          ┌─────────────────┐
+          │  S3 bucket      │
+          └─────────────────┘
+```
+
+**Critical requirement:** Both services must share the same `UPLOAD_QUEUE_DB` path. The shared env file at `/etc/tunnel-detect/tunnel-detect.env` already exports it for both systemd units. SQLite WAL mode is enabled automatically, allowing safe concurrent reads/writes from both processes.
+
+| Environment variable | Default | Purpose |
+|---------------------|---------|---------|
+| `UPLOAD_QUEUE_DB` | `/data/tunnel/queue.db` | Path to the shared SQLite queue database. Must be the same value for both services. |
+| `UPLOAD_MAX_RETRIES` | `5` | Max upload attempts before an item is moved to dead-letter. |
+| `USE_UPLOAD_QUEUE` | `1` | Set to `0` on the detect daemon to fall back to legacy `scan_uploader` direct upload (rollback lever). |
 
 ## 7. Troubleshooting
 

@@ -2,6 +2,10 @@
 SQLite-backed persistent upload queue.
 Tracks images that failed immediate upload so the background worker
 can retry them when connectivity returns. Survives Pi reboots.
+
+Importable from both pi/ (trigger_server) and model/ (detect_daemon);
+pass explicit *db_path* / *max_retries* when ``pi.config`` is not on
+``sys.path``.
 """
 
 from __future__ import annotations
@@ -13,7 +17,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-import config
+try:
+    import config as _cfg
+
+    _DEFAULT_DB_PATH: str = str(_cfg.UPLOAD_QUEUE_DB)
+    _DEFAULT_MAX_RETRIES: int = _cfg.UPLOAD_MAX_RETRIES
+except Exception:
+    _DEFAULT_DB_PATH = "/data/tunnel/queue.db"
+    _DEFAULT_MAX_RETRIES = 5
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +78,19 @@ class QueueStats:
 
 
 class UploadQueue:
-    """Persistent queue backed by SQLite."""
+    """Persistent queue backed by SQLite.
 
-    def __init__(self, db_path: Path | None = None):
-        self._db_path = str(db_path or config.UPLOAD_QUEUE_DB)
+    Both ``trigger_server`` and ``detect_daemon`` can instantiate this class.
+    Pass *db_path* / *max_retries* explicitly when importing outside ``pi/``.
+    """
+
+    def __init__(
+        self,
+        db_path: Path | str | None = None,
+        max_retries: int | None = None,
+    ):
+        self._db_path = str(db_path or _DEFAULT_DB_PATH)
+        self._max_retries = max_retries if max_retries is not None else _DEFAULT_MAX_RETRIES
         self._ensure_dir()
         self._init_db()
 
@@ -102,6 +122,40 @@ class UploadQueue:
             )
         logger.info("Enqueued %s/%s for retry (id=%s)", event_id, camera_id, item_id)
         return item_id
+
+    def enqueue_scan(
+        self,
+        event_id: str,
+        frames: list[tuple[str, str, str]],
+        event_json_path: str | None = None,
+        event_json_s3_key: str | None = None,
+    ) -> int:
+        """Enqueue all frames (and optionally event.json) from a burst scan.
+
+        *frames* is a list of ``(camera_id, local_path, s3_key)`` tuples.
+        Returns total number of items enqueued.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        rows: list[tuple[str, str, str, str, str, str]] = []
+        for camera_id, local_path, s3_key in frames:
+            rows.append((uuid.uuid4().hex[:16], event_id, camera_id, local_path, s3_key, now))
+
+        if event_json_path and event_json_s3_key:
+            rows.append(
+                (uuid.uuid4().hex[:16], event_id, "__meta__", event_json_path, event_json_s3_key, now)
+            )
+
+        with self._conn() as conn:
+            conn.executemany(
+                """
+                INSERT INTO upload_queue
+                    (id, event_id, camera_id, local_path, s3_key, status, created_at)
+                VALUES (?, ?, ?, ?, ?, 'pending', ?)
+                """,
+                rows,
+            )
+        logger.info("enqueue_scan: queued %d items for event %s", len(rows), event_id)
+        return len(rows)
 
     def enqueue_failures(self, event_id: str, s3_results: list) -> int:
         """
@@ -160,7 +214,7 @@ class UploadQueue:
         Returns ``True`` if the item was moved to dead-letter.
         """
         if max_retries is None:
-            max_retries = config.UPLOAD_MAX_RETRIES
+            max_retries = self._max_retries
 
         with self._conn() as conn:
             row = conn.execute(

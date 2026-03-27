@@ -2,6 +2,8 @@
 
 End-to-end instructions for deploying the tunnel capture service and vehicle detection daemon on a Raspberry Pi.
 
+A **version-controlled template** for the env file lives at [`tunnel-detect.env.example`](tunnel-detect.env.example). Copy it to `/etc/tunnel-detect/tunnel-detect.env` on the Pi and replace placeholders.
+
 ## Prerequisites
 
 - Raspberry Pi 4 (4 GB+ recommended) running Raspberry Pi OS (64-bit)
@@ -36,7 +38,15 @@ Verify the file is in the expected location:
 ls -lh /home/pi/camera-system/model/yolov8n.onnx
 ```
 
-The path is controlled by the `YOLO_MODEL` environment variable (default: `yolov8n.onnx`, resolved relative to the working directory).
+The path is controlled by the `YOLO_MODEL` environment variable (default: `yolov8n.onnx`, resolved relative to the **detection daemon** working directory, which is `camera-system/model` — see `model/tunnel-detect.service`).
+
+Confirm the file is readable by the `pi` user and non-empty:
+
+```bash
+test -r /home/pi/camera-system/model/yolov8n.onnx && wc -c /home/pi/camera-system/model/yolov8n.onnx
+```
+
+Use an ONNX export compatible with **onnxruntime** on the Pi (opset 17 is typical for the Ultralytics YOLOv8n export).
 
 ## 2. RTSP Camera Configuration
 
@@ -70,16 +80,46 @@ Then set:
 CAMERAS_JSON=/etc/tunnel-detect/cameras.json
 ```
 
-### Credential rotation
+### Credential rotation (runbook)
 
-When rotating camera credentials:
+Credentials appear in two places:
 
-1. Update `CAMERA_USER` and `CAMERA_PASS` in `/etc/tunnel-detect/tunnel-detect.env`
-2. Restart both services: `sudo systemctl restart tunnel-trigger tunnel-detect`
+| Pattern | Where secrets live | When to change |
+|--------|---------------------|----------------|
+| **Placeholders** | `CAMERAS_JSON` uses `rtsp://${CAMERA_USER}:${CAMERA_PASS}@...` | Change only `tunnel-detect.env` |
+| **Embedded in URL** | Each camera entry has `user:pass` inside the `url` field | Edit `cameras.json` (and keep `chmod 600`) |
+
+**Recommended:** placeholders + `CAMERA_USER` / `CAMERA_PASS` so rotation is one file plus a service restart.
+
+**Steps (shared password across cameras):**
+
+1. Set new credentials on the camera or NVR (per vendor UI).
+2. On the Pi: `sudo nano /etc/tunnel-detect/tunnel-detect.env` — update `CAMERA_USER` / `CAMERA_PASS`.
+3. Optional: verify one stream with redacted logging — `ffprobe -rtsp_transport tcp -i 'rtsp://USER:PASS@192.168.x.x:554/'` (use a non-production shell history or a one-off script; prefer testing from the Pi).
+4. Reload units if you changed unit files; otherwise restart both processes so they pick up the env file:
+   ```bash
+   sudo systemctl restart tunnel-detect tunnel-trigger
+   ```
+5. Confirm: `curl -s http://localhost:8000/health | jq .` — expect a positive `cameras_discovered`, and check `journalctl -u tunnel-detect -n 30 --no-pager` for RTSP errors.
+
+**Operational notes:**
+
+- Rotate during a **maintenance window** if possible: both daemons drop RTSP sessions on restart; the upload worker on `tunnel-trigger` will continue draining `UPLOAD_QUEUE_DB` after restart.
+- Keep `/etc/tunnel-detect/tunnel-detect.env` and `cameras.json` at **mode 600** and owned by root; systemd reads them before dropping privileges.
+- After rotation, avoid leaving old passwords in shell history; prefer editing with `sudo -E` editor or copying from a secrets manager.
 
 ## 3. Environment Variable Reference
 
-Create the environment file at `/etc/tunnel-detect/tunnel-detect.env`:
+To start from the repo template:
+
+```bash
+sudo mkdir -p /etc/tunnel-detect
+sudo cp /home/pi/camera-system/docs/tunnel-detect.env.example /etc/tunnel-detect/tunnel-detect.env
+sudo nano /etc/tunnel-detect/tunnel-detect.env
+sudo chmod 600 /etc/tunnel-detect/tunnel-detect.env
+```
+
+Alternatively, bootstrap with a heredoc (equivalent to the example file):
 
 ```bash
 sudo mkdir -p /etc/tunnel-detect

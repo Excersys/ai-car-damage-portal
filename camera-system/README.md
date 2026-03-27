@@ -41,6 +41,8 @@ Automated pipeline that detects when a car enters a tunnel, captures images from
 
 ### 1. Raspberry Pi Setup
 
+Full production steps (ONNX model, `/etc/tunnel-detect` env, systemd units, RTSP rotation) are in **[`docs/PI_DEPLOYMENT.md`](docs/PI_DEPLOYMENT.md)**. Env template: [`docs/tunnel-detect.env.example`](docs/tunnel-detect.env.example).
+
 ```bash
 cd pi
 chmod +x setup_pi.sh

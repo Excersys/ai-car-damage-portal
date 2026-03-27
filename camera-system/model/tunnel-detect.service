@@ -27,7 +27,9 @@ SyslogIdentifier=tunnel-detect
 # Hardening
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/data/tunnel/events
+# detect_daemon writes burst metadata under EVENT_OUTPUT_DIR, scan JSON under
+# SCAN_RESULTS_DIR, and enqueues to UPLOAD_QUEUE_DB — all typically under /data/tunnel.
+ReadWritePaths=/data/tunnel
 ProtectHome=read-only
 PrivateTmp=true
 

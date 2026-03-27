@@ -37,6 +37,9 @@ class StorageStack(cdk.Stack):
             ],
         )
 
+        # Sort key must be unique per (camera, frame) for a burst, e.g.
+        # ``cam_061#frame_0002``. Damage handler and Review API rely on this
+        # (see lambdas/damage_detection/handler._store_result).
         self.events_table = dynamodb.Table(
             self,
             "TunnelDamageEvents",

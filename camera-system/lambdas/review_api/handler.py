@@ -35,12 +35,10 @@ def lambda_handler(event: dict, context) -> dict:
     logger.info("Fetching results for event_id=%s", event_id)
 
     try:
-        result = table.query(KeyConditionExpression=Key("event_id").eq(event_id))
+        items = _query_all_items_for_event(event_id)
     except Exception:
         logger.exception("DynamoDB query failed")
         return _response(500, {"error": "Internal server error"})
-
-    items = result.get("Items", [])
     if not items:
         return _response(404, {"error": f"Event {event_id} not found"})
 
@@ -73,6 +71,29 @@ def lambda_handler(event: dict, context) -> dict:
     }
 
     return _response(200, body)
+
+
+def _query_all_items_for_event(event_id: str) -> list:
+    """
+    Read every DynamoDB row for *event_id* (partition key).
+
+    Pages through ``LastEvaluatedKey`` so large multi-camera / multi-frame
+    bursts are not truncated at 1 MB per call (ACR-133).
+    """
+    items: list = []
+    start_key = None
+    while True:
+        kw: dict = {"KeyConditionExpression": Key("event_id").eq(event_id)}
+        if start_key:
+            kw["ExclusiveStartKey"] = start_key
+        page = table.query(**kw)
+        items.extend(page.get("Items", []))
+        start_key = page.get("LastEvaluatedKey")
+        if not start_key:
+            break
+    # Deterministic order: sort key is camera_frame (e.g. cam_061#frame_0003).
+    items.sort(key=lambda it: it.get("camera_frame", ""))
+    return items
 
 
 def _presigned_url(s3_key: str) -> str:

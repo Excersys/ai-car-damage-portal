@@ -135,6 +135,49 @@ class TestReviewApi:
         resp = self.handler.lambda_handler(_api_event("evt-3"), None)
         assert resp["statusCode"] == 500
 
+    def test_paginates_all_pages(self):
+        """Large events must follow LastEvaluatedKey (ACR-133)."""
+        item_a = {
+            "event_id": "evt-pages",
+            "camera_frame": "cam_061#frame_0001",
+            "camera_id": "cam_061",
+            "frame": "frame_0001",
+            "image_path": "a.jpg",
+            "damage_detected": False,
+            "damage_type": "none",
+            "confidence_score": "0.1",
+            "bounding_boxes": "[]",
+            "timestamp": "2026-03-26T12:00:01Z",
+        }
+        item_b = {
+            "event_id": "evt-pages",
+            "camera_frame": "cam_061#frame_0000",
+            "camera_id": "cam_061",
+            "frame": "frame_0000",
+            "image_path": "b.jpg",
+            "damage_detected": False,
+            "damage_type": "none",
+            "confidence_score": "0.1",
+            "bounding_boxes": "[]",
+            "timestamp": "2026-03-26T12:00:00Z",
+        }
+
+        self.mock_table.query.side_effect = [
+            {
+                "Items": [item_a],
+                "LastEvaluatedKey": {"event_id": "evt-pages", "camera_frame": "x"},
+            },
+            {"Items": [item_b]},
+        ]
+        resp = self.handler.lambda_handler(_api_event("evt-pages"), None)
+        assert resp["statusCode"] == 200
+        body = json.loads(resp["body"])
+        assert body["total_frames"] == 2
+        # Sorted by camera_frame for stable order
+        assert body["frames"][0]["frame"] == "frame_0000"
+        assert body["frames"][1]["frame"] == "frame_0001"
+        assert self.mock_table.query.call_count == 2
+
     def test_fallback_camera_id_from_composite_key(self):
         """If camera_id attribute is missing, extract from camera_frame."""
         self.mock_table.query.return_value = {

@@ -119,9 +119,10 @@ def _invoke_model(image_bytes: bytes) -> dict | None:
 def _store_result(parsed: dict, image_path: str, prediction: dict) -> None:
     """Write the structured detection result to DynamoDB.
 
-    The sort key is ``camera_frame`` — a composite of camera_id and frame
-    (e.g. ``cam_061#frame_0002``).  This prevents multi-frame bursts from
-    overwriting each other while still allowing efficient queries by event.
+    The partition key is ``event_id``; the sort key ``camera_frame`` must be
+    ``{camera_id}#{frame}`` (e.g. ``cam_061#frame_0002``) so frames from the
+    same camera do not overwrite. Must stay aligned with
+    ``infra/stacks/storage_stack.py`` and Review API query-by-event.
     """
     confidence = prediction.get("confidence", 0)
     damage_detected = confidence >= CONFIDENCE_THRESHOLD

@@ -47,6 +47,7 @@ class TestTriggerEndpoint:
                 success=True,
             ),
         ]
+        mock_q.stats.return_value = MagicMock(pending=0, dead_letter=0)
 
         resp = client.post("/trigger", json={"sensor_id": "s1", "timestamp": "t"})
 
@@ -81,6 +82,7 @@ class TestTriggerEndpoint:
             ),
         ]
         mock_q.enqueue_failures.return_value = 1
+        mock_q.stats.return_value = MagicMock(pending=0, dead_letter=0)
 
         resp = client.post("/trigger", json={"sensor_id": "s1", "timestamp": "t"})
 
@@ -88,7 +90,43 @@ class TestTriggerEndpoint:
         body = resp.json()
         assert body["cameras_uploaded"] == 0
         assert body["cameras_queued"] == 1
+        assert body.get("queue_saturated") is False
         mock_q.enqueue_failures.assert_called_once()
+
+    @patch("trigger_server.queue")
+    @patch("trigger_server.upload_event")
+    @patch("trigger_server.capture_all")
+    @patch("trigger_server.generate_event_id", return_value="abc123")
+    def test_trigger_queue_saturated_skips_enqueue(
+        self, mock_eid, mock_capture, mock_upload, mock_q, client,
+    ):
+        mock_capture.return_value = [
+            CaptureResult(
+                camera_id="usb_0",
+                local_path=Path("/tmp/usb_0.jpg"),
+                timestamp="t",
+                size_bytes=300,
+                success=True,
+            ),
+        ]
+        mock_upload.return_value = [
+            S3Result(
+                camera_id="usb_0",
+                local_path=Path("/tmp/usb_0.jpg"),
+                s3_key="abc123/usb_0.jpg",
+                success=False,
+                error="no internet",
+            ),
+        ]
+        mock_q.stats.return_value = MagicMock(pending=50, dead_letter=0)
+        with patch("trigger_server.config.UPLOAD_QUEUE_MAX_PENDING", 50):
+            resp = client.post("/trigger", json={"sensor_id": "s1", "timestamp": "t"})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["cameras_queued"] == 0
+        assert body["queue_saturated"] is True
+        mock_q.enqueue_failures.assert_not_called()
 
 
 class TestManualTrigger:
@@ -99,6 +137,7 @@ class TestManualTrigger:
     def test_manual_trigger(self, mock_eid, mock_capture, mock_upload, mock_q, client):
         mock_capture.return_value = []
         mock_upload.return_value = []
+        mock_q.stats.return_value = MagicMock(pending=0, dead_letter=0)
 
         resp = client.post("/trigger/manual")
 

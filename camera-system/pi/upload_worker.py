@@ -90,7 +90,10 @@ class UploadWorker:
         uploaded = 0
         dead_lettered = 0
         for item in batch:
-            extra = {"event_id": item.event_id}
+            extra = {
+                "event_id": item.event_id,
+                "correlation_id": item.event_id,
+            }
             t0 = time.monotonic()
             result = await asyncio.to_thread(
                 upload_image,
@@ -112,7 +115,9 @@ class UploadWorker:
                     }},
                 )
             else:
-                is_dead = self._queue.mark_failed(item.id, result.error)
+                is_dead = self._queue.mark_failed(
+                    item.id, result.error, event_id=item.event_id
+                )
                 if is_dead:
                     dead_lettered += 1
                 logger.warning(
@@ -121,7 +126,7 @@ class UploadWorker:
                     extra={**extra, "metric": {
                         "retry_upload_ms": round(elapsed_ms, 1),
                         "attempt": item.attempts + 1,
-                        "dead_lettered": is_dead,
+                        "dead_letter": is_dead,
                     }},
                 )
 

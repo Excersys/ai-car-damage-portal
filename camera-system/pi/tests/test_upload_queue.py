@@ -31,6 +31,13 @@ class TestEnqueue:
         assert isinstance(item_id, str)
         assert len(item_id) == 16
 
+    def test_enqueue_refused_at_pending_cap(self, q, monkeypatch):
+        monkeypatch.setattr("upload_queue._max_pending_cap", lambda: 2)
+        assert q.enqueue("evt1", "usb_0", "/tmp/a.jpg", "k1") is not None
+        assert q.enqueue("evt1", "usb_1", "/tmp/b.jpg", "k2") is not None
+        assert q.enqueue("evt1", "usb_2", "/tmp/c.jpg", "k3") is None
+        assert q.stats().pending == 2
+
     def test_enqueue_shows_in_stats(self, q):
         q.enqueue("evt1", "usb_0", "/tmp/a.jpg", "evt1/usb_0.jpg")
         q.enqueue("evt1", "usb_1", "/tmp/b.jpg", "evt1/usb_1.jpg")
@@ -79,6 +86,14 @@ class TestEnqueueScan:
         count = q.enqueue_scan("evt1", [])
         assert count == 0
         assert q.stats().pending == 0
+
+    def test_enqueue_scan_refused_when_would_exceed_cap(self, q, monkeypatch):
+        monkeypatch.setattr("upload_queue._max_pending_cap", lambda: 2)
+        q.enqueue("e0", "c", "/tmp/x", "k")
+        q.enqueue("e0", "c2", "/tmp/y", "k2")
+        frames = [("cam_1", "/tmp/f.jpg", "scans/X/e/cam_1/frame_0000.jpg")]
+        assert q.enqueue_scan("evt1", frames) == 0
+        assert q.stats().pending == 2
 
     def test_enqueue_scan_event_json_only_when_both_args(self, q):
         """event.json is only enqueued when both path and s3_key are given."""

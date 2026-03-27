@@ -11,6 +11,7 @@ pass explicit *db_path* / *max_retries* when ``pi.config`` is not on
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 import uuid
 from dataclasses import dataclass
@@ -25,6 +26,16 @@ try:
 except Exception:
     _DEFAULT_DB_PATH = "/data/tunnel/queue.db"
     _DEFAULT_MAX_RETRIES = 5
+
+
+def _max_pending_cap() -> int:
+    try:
+        import config as _cfg
+
+        return int(_cfg.UPLOAD_QUEUE_MAX_PENDING)
+    except Exception:
+        return int(os.environ.get("UPLOAD_QUEUE_MAX_PENDING", "2000"))
+
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +118,24 @@ class UploadQueue:
             conn.execute(_CREATE_TABLE_SQL)
             conn.execute(_CREATE_INDEX_SQL)
 
-    def enqueue(self, event_id: str, camera_id: str, local_path: str, s3_key: str) -> str:
-        """Add one failed upload to the queue. Returns the queue item id."""
+    def _pending_count(self) -> int:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM upload_queue WHERE status = 'pending'"
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+    def enqueue(self, event_id: str, camera_id: str, local_path: str, s3_key: str) -> str | None:
+        """Add one failed upload to the queue. Returns item id, or None if at capacity."""
+        cap = _max_pending_cap()
+        if self._pending_count() >= cap:
+            logger.error(
+                "enqueue refused: pending at cap (%d) for %s/%s",
+                cap,
+                event_id,
+                camera_id,
+            )
+            return None
         item_id = uuid.uuid4().hex[:16]
         now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
@@ -120,7 +147,13 @@ class UploadQueue:
                 """,
                 (item_id, event_id, camera_id, local_path, s3_key, now),
             )
-        logger.info("Enqueued %s/%s for retry (id=%s)", event_id, camera_id, item_id)
+        logger.info(
+            "Enqueued %s/%s for retry (id=%s)",
+            event_id,
+            camera_id,
+            item_id,
+            extra={"event_id": event_id, "correlation_id": event_id},
+        )
         return item_id
 
     def enqueue_scan(
@@ -145,6 +178,19 @@ class UploadQueue:
                 (uuid.uuid4().hex[:16], event_id, "__meta__", event_json_path, event_json_s3_key, now)
             )
 
+        cap = _max_pending_cap()
+        pending = self._pending_count()
+        if pending + len(rows) > cap:
+            logger.error(
+                "enqueue_scan refused: pending=%d adding=%d cap=%d event=%s",
+                pending,
+                len(rows),
+                cap,
+                event_id,
+                extra={"event_id": event_id, "correlation_id": event_id},
+            )
+            return 0
+
         with self._conn() as conn:
             conn.executemany(
                 """
@@ -154,7 +200,12 @@ class UploadQueue:
                 """,
                 rows,
             )
-        logger.info("enqueue_scan: queued %d items for event %s", len(rows), event_id)
+        logger.info(
+            "enqueue_scan: queued %d items for event %s",
+            len(rows),
+            event_id,
+            extra={"event_id": event_id, "correlation_id": event_id},
+        )
         return len(rows)
 
     def enqueue_failures(self, event_id: str, s3_results: list) -> int:
@@ -165,8 +216,9 @@ class UploadQueue:
         count = 0
         for r in s3_results:
             if not r.success:
-                self.enqueue(event_id, r.camera_id, str(r.local_path), r.s3_key)
-                count += 1
+                qid = self.enqueue(event_id, r.camera_id, str(r.local_path), r.s3_key)
+                if qid:
+                    count += 1
         return count
 
     def dequeue_batch(self, batch_size: int = 10) -> list[QueueItem]:
@@ -205,7 +257,14 @@ class UploadQueue:
                 (item_id,),
             )
 
-    def mark_failed(self, item_id: str, error: str, max_retries: int | None = None) -> bool:
+    def mark_failed(
+        self,
+        item_id: str,
+        error: str,
+        max_retries: int | None = None,
+        *,
+        event_id: str | None = None,
+    ) -> bool:
         """Mark an item as failed and increment the attempt counter.
 
         If *max_retries* is provided and the item has exceeded it, the status
@@ -231,9 +290,16 @@ class UploadQueue:
                 (new_status, new_attempts, error, item_id),
             )
             if new_status == "dead_letter":
+                extra: dict = {}
+                if event_id:
+                    extra["event_id"] = event_id
+                    extra["correlation_id"] = event_id
                 logger.warning(
                     "Item %s moved to dead-letter after %d attempts: %s",
-                    item_id, new_attempts, error,
+                    item_id,
+                    new_attempts,
+                    error,
+                    extra=extra,
                 )
             return new_status == "dead_letter"
 

@@ -40,6 +40,11 @@ UPLOAD_WORKER_BACKOFF_MAX_S: float = float(
 )
 UPLOAD_MAX_RETRIES: int = int(os.environ.get("UPLOAD_MAX_RETRIES", "5"))
 
+# Refuse new enqueues when pending rows >= this (backpressure / disk safety).
+UPLOAD_QUEUE_MAX_PENDING: int = int(
+    os.environ.get("UPLOAD_QUEUE_MAX_PENDING", "2000")
+)
+
 SERVER_HOST: str = os.environ.get("SERVER_HOST", "0.0.0.0")
 SERVER_PORT: int = int(os.environ.get("SERVER_PORT", "8000"))
 

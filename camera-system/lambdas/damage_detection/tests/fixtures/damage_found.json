@@ -1,0 +1,7 @@
+{
+  "confidence": 0.92,
+  "damage_type": "dent",
+  "bounding_boxes": [
+    {"x": 120, "y": 80, "width": 50, "height": 40, "confidence": 0.92, "label": "dent"}
+  ]
+}

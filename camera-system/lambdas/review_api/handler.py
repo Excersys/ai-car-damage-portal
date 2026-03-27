@@ -44,11 +44,17 @@ def lambda_handler(event: dict, context) -> dict:
     if not items:
         return _response(404, {"error": f"Event {event_id} not found"})
 
-    cameras = []
+    frames = []
     for item in items:
+        camera_frame = item.get("camera_frame", "")
+        camera_id = item.get("camera_id") or camera_frame.split("#")[0]
+        frame = item.get("frame") or (
+            camera_frame.split("#")[1] if "#" in camera_frame else "frame_0000"
+        )
         image_url = _presigned_url(item.get("image_path", ""))
-        cameras.append({
-            "camera_id": item["camera_id"],
+        frames.append({
+            "camera_id": camera_id,
+            "frame": frame,
             "image_url": image_url,
             "damage_detected": item.get("damage_detected", False),
             "damage_type": item.get("damage_type", "unknown"),
@@ -57,11 +63,13 @@ def lambda_handler(event: dict, context) -> dict:
             "timestamp": item.get("timestamp", ""),
         })
 
+    unique_cameras = {f["camera_id"] for f in frames}
     body = {
         "event_id": event_id,
-        "cameras": cameras,
-        "total_cameras": len(cameras),
-        "any_damage": any(c["damage_detected"] for c in cameras),
+        "frames": frames,
+        "total_frames": len(frames),
+        "total_cameras": len(unique_cameras),
+        "any_damage": any(f["damage_detected"] for f in frames),
     }
 
     return _response(200, body)

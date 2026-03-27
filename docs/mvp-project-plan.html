@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Car Rental — Lean MVP project plan</title>
+  <style>
+    :root {
+      --text: #1a1a1a;
+      --muted: #5c5c5c;
+      --border: #d4d4d4;
+      --head: #0f172a;
+      --accent: #1d4ed8;
+      --zebra: #f8fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.5;
+      color: var(--text);
+      max-width: 60rem;
+      margin: 0 auto;
+      padding: 1.5rem 1.25rem 3rem;
+    }
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--head);
+      margin: 0 0 1rem;
+      line-height: 1.25;
+    }
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--head);
+      margin: 2rem 0 0.75rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid var(--border);
+    }
+    p.meta {
+      margin: 0.35rem 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    hr {
+      border: 0;
+      border-top: 1px solid var(--border);
+      margin: 1.5rem 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin: 0.75rem 0 1rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.65rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: var(--zebra);
+      font-weight: 600;
+      color: var(--head);
+    }
+    tbody tr:nth-child(even) { background: #fafafa; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    code {
+      font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+      font-size: 0.88em;
+      background: #f1f5f9;
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    ol.notes { margin: 0.75rem 0; padding-left: 1.25rem; }
+    ol.notes li { margin: 0.35rem 0; }
+    .post { font-style: italic; color: var(--muted); }
+    @media print {
+      body { max-width: none; padding: 0; }
+      a[href]::after { content: ""; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>AI Car Rental — Lean MVP project plan</h1>
+
+  <p class="meta"><strong>Jira project:</strong> <a href="https://excersys.atlassian.net/jira/software/c/projects/ACR/boards/324">ACR</a></p>
+  <p class="meta"><strong>Planning basis:</strong> Tunnel/scan first, then rental commerce + test payments, then booking persistence + portal QC.</p>
+  <p class="meta"><strong>Story points</strong> use Jira field <code>customfield_10028</code> (Story points).</p>
+
+  <h2>MVP in three phases</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Phase</th>
+        <th>Focus</th>
+        <th>Sprint goal</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>1</strong></td>
+        <td>Tunnel &amp; scan</td>
+        <td>Coherent capture/pipeline; correct S3 keys; E2E test hygiene</td>
+      </tr>
+      <tr>
+        <td><strong>2</strong></td>
+        <td>Rental commerce</td>
+        <td>Real inventory + Cognito auth + booking + Stripe test checkout</td>
+      </tr>
+      <tr>
+        <td><strong>3</strong></td>
+        <td>Payments + portal QC</td>
+        <td>Webhooks/finalization; NextAuth; inspections list; QC write API; portal ↔ tunnel API</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="meta"><strong>Post-MVP:</strong> Identity production (Veriff), full e-sign, ML training/SageMaker hardening, camera architecture follow-ups, admin breadth, RBAC polish — see backlog section.</p>
+
+  <h2>Epics (high level)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Epic</th>
+        <th>Name</th>
+        <th>Functionality (high level)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>ACR-103</strong></td>
+        <td>Platform foundations and environment parity</td>
+        <td>Shared env, CI quality, parity across apps — umbrella for cross-cutting work</td>
+      </tr>
+      <tr>
+        <td><strong>ACR-104</strong></td>
+        <td>Rental commerce core</td>
+        <td>Vehicle search, availability, booking flow, routing between customer-facing pages</td>
+      </tr>
+      <tr>
+        <td><strong>ACR-105</strong></td>
+        <td>Identity, authentication, and agreement flow</td>
+        <td>Cognito, Veriff/KYC, rental agreements and signatures</td>
+      </tr>
+      <tr>
+        <td><strong>ACR-106</strong></td>
+        <td>Payments, charges, booking finalization</td>
+        <td>Stripe intents, webhooks, booking state vs payment events</td>
+      </tr>
+      <tr>
+        <td><strong>ACR-107</strong></td>
+        <td>Tunnel detection and capture reliability</td>
+        <td>Pi capture services, trigger vs detection alignment, upload path, plate metadata</td>
+      </tr>
+      <tr>
+        <td><strong>ACR-108</strong></td>
+        <td>Damage model inference and inspection pipeline</td>
+        <td>Model artifacts, SageMaker/endpoint, E2E around scan events</td>
+      </tr>
+      <tr>
+        <td><strong>ACR-109</strong></td>
+        <td>Portal review, QC, and inspection operations</td>
+        <td>Next.js portal: inspections, QC workflow, bounding boxes, customer views</td>
+      </tr>
+      <tr>
+        <td><strong>ACR-110</strong></td>
+        <td>Unified data model and cross-system linking</td>
+        <td>Portal and camera-system APIs sharing real tunnel/scan data</td>
+      </tr>
+      <tr>
+        <td><strong>ACR-111</strong></td>
+        <td>Security, compliance, monitoring, launch readiness</td>
+        <td>Cognito custom attributes/RBAC, observability, dev ergonomics (.env, tests)</td>
+      </tr>
+      <tr>
+        <td><strong>ACR-145</strong></td>
+        <td>Admin</td>
+        <td>Rental-app admin pages, routes, mock → real API</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>All gap tasks (ACR-146 — ACR-169)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Ticket</th>
+        <th>Epic</th>
+        <th class="num">SP</th>
+        <th>MVP phase</th>
+        <th>Summary</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>ACR-146</td><td>ACR-104</td><td class="num">2</td><td><strong>2</strong></td><td>Fix <code>BookingConfirmationPage</code> / <code>BookingFormPage</code> state contract so confirmation works</td></tr>
+      <tr><td>ACR-147</td><td>ACR-104</td><td class="num">3</td><td><strong>2</strong></td><td>Wire <code>CarsPage</code> to <code>GET /vehicles/search</code> (remove mock array)</td></tr>
+      <tr><td>ACR-148</td><td>ACR-104</td><td class="num">5</td><td><strong>2</strong></td><td>Replace mock vehicle data in API Lambda with real DB queries</td></tr>
+      <tr><td>ACR-149</td><td>ACR-104</td><td class="num">3</td><td><strong>2</strong></td><td>Wire <code>VehicleSearch</code> / <code>VehicleDetails</code> / <code>DamageDetectionPage</code> into routing</td></tr>
+      <tr><td>ACR-150</td><td>ACR-105</td><td class="num">5</td><td class="post">Post-MVP</td><td>Real Veriff SDK + session + webhooks (replace simulated verification)</td></tr>
+      <tr><td>ACR-151</td><td>ACR-105</td><td class="num">5</td><td><strong>2</strong></td><td>Wire <code>LoginPage</code> to Cognito (<code>/auth</code>); token storage aligned with dashboard</td></tr>
+      <tr><td>ACR-152</td><td>ACR-105</td><td class="num">5</td><td class="post">Post-MVP</td><td>Digital rental agreement PDF + e-signature + S3 + audit</td></tr>
+      <tr><td>ACR-153</td><td>ACR-106</td><td class="num">2</td><td><strong>2</strong></td><td>PaymentForm: real Stripe test flow in dev (no fake <code>clientSecret</code> bypass)</td></tr>
+      <tr><td>ACR-154</td><td>ACR-106</td><td class="num">3</td><td><strong>3</strong></td><td>Stripe webhooks → booking confirm, disputes, capture/refund orchestration</td></tr>
+      <tr><td>ACR-155</td><td>ACR-107</td><td class="num">5</td><td><strong>1</strong></td><td>Unify <code>trigger_server.py</code> and <code>detect_daemon.py</code> into one coherent pipeline</td></tr>
+      <tr><td>ACR-156</td><td>ACR-107</td><td class="num">3</td><td><strong>1</strong></td><td>Use real plate (or consistent id) in S3 keys from <code>plate_reader</code> / uploader</td></tr>
+      <tr><td>ACR-157</td><td>ACR-108</td><td class="num">5</td><td class="post">Post-MVP</td><td>Damage model training pipeline or documented acquisition</td></tr>
+      <tr><td>ACR-158</td><td>ACR-108</td><td class="num">8</td><td class="post">Post-MVP</td><td>SageMaker inference container + CDK endpoint + Lambda DLQ patterns</td></tr>
+      <tr><td>ACR-159</td><td>ACR-108</td><td class="num">1</td><td><strong>1</strong></td><td>Fix E2E cleanup: correct DynamoDB sort key (<code>camera_frame</code> vs <code>camera_id</code>)</td></tr>
+      <tr><td>ACR-160</td><td>ACR-109</td><td class="num">3</td><td><strong>3</strong></td><td>Add <code>app/inspections/page.tsx</code> list + Sidebar link</td></tr>
+      <tr><td>ACR-161</td><td>ACR-109</td><td class="num">5</td><td><strong>3</strong></td><td>NextAuth: move handler to <code>app/api/auth</code>, fix middleware, session in Sidebar/QC</td></tr>
+      <tr><td>ACR-162</td><td>ACR-109</td><td class="num">3</td><td class="post">Post-MVP</td><td>Customers page: DB-backed data, real report actions</td></tr>
+      <tr><td>ACR-163</td><td>ACR-109</td><td class="num">5</td><td><strong>3</strong></td><td>Review API Lambda: POST/PATCH for QC decisions → DynamoDB</td></tr>
+      <tr><td>ACR-164</td><td>ACR-109</td><td class="num">3</td><td class="post">Post-MVP</td><td>Bounding-box overlay: real image dimensions (remove 800×600 mock scaling)</td></tr>
+      <tr><td>ACR-165</td><td>ACR-110</td><td class="num">8</td><td><strong>3</strong></td><td>Portal calls Review/tunnel APIs; dashboard feed uses real scan events</td></tr>
+      <tr><td>ACR-166</td><td>ACR-111</td><td class="num">3</td><td class="post">Post-MVP</td><td>Cognito <code>custom:role</code> in CDK + admin/fleet role assignment</td></tr>
+      <tr><td>ACR-167</td><td>ACR-111</td><td class="num">2</td><td><strong>2</strong></td><td><code>.env.example</code> + Jest config fixes (<code>setupTests</code>, <code>moduleNameMapper</code>, ts-jest)</td></tr>
+      <tr><td>ACR-168</td><td>ACR-145</td><td class="num">8</td><td class="post">Post-MVP</td><td>Replace mock data on all five rental-app admin pages with real API</td></tr>
+      <tr><td>ACR-169</td><td>ACR-145</td><td class="num">2</td><td class="post">Post-MVP</td><td>Missing admin routes (<code>/admin/customers</code>, <code>/admin/reports</code>) + wire <code>DamageDetectionPage</code></td></tr>
+    </tbody>
+  </table>
+
+  <h2>MVP scope totals</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Phase</th>
+        <th>Tickets</th>
+        <th class="num">Story points</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>1 — Tunnel &amp; scan</td><td>ACR-155, ACR-156, ACR-159</td><td class="num"><strong>9</strong></td></tr>
+      <tr><td>2 — Commerce + test pay</td><td>ACR-146 — ACR-149, ACR-151, ACR-153, ACR-167</td><td class="num"><strong>22</strong></td></tr>
+      <tr><td>3 — Pay sticks + portal QC</td><td>ACR-154, ACR-160 — ACR-161, ACR-163, ACR-165</td><td class="num"><strong>24</strong></td></tr>
+      <tr><td><strong>MVP subtotal</strong></td><td></td><td class="num"><strong>55</strong></td></tr>
+      <tr><td>Post-MVP (deferred)</td><td>ACR-150, ACR-152, ACR-157 — ACR-158, ACR-162, ACR-164, ACR-166, ACR-168 — ACR-169</td><td class="num"><strong>37</strong></td></tr>
+      <tr><td><strong>All gap tasks</strong></td><td>ACR-146 — ACR-169</td><td class="num"><strong>92</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Post-MVP backlog (by epic theme)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Epic</th>
+        <th>Tickets</th>
+        <th>Theme</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>ACR-105</td><td>150, 152</td><td>Production identity + legal/signature</td></tr>
+      <tr><td>ACR-108</td><td>157, 158</td><td>Model training + managed inference</td></tr>
+      <tr><td>ACR-109</td><td>162, 164</td><td>Portal customer views + QC UX polish</td></tr>
+      <tr><td>ACR-111</td><td>166</td><td>RBAC / admin roles in Cognito</td></tr>
+      <tr><td>ACR-145</td><td>168, 169</td><td>Admin surface completion</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Dependencies (short)</h2>
+  <ol class="notes">
+    <li><strong>Phase 1</strong> should stabilize tunnel keys and capture path before <strong>ACR-165</strong> (portal consuming tunnel data).</li>
+    <li><strong>ACR-148</strong> underpins <strong>ACR-147</strong> / <strong>ACR-149</strong> for truly “real” listings.</li>
+    <li><strong>ACR-163</strong> + <strong>ACR-165</strong> together deliver “QC skeleton + cross-system truth.”</li>
+  </ol>
+
+  <h2>Document control</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Version</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>2026-03</td>
+        <td>Lean MVP phasing: tunnel first; Story points on <code>customfield_10028</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+</body>
+</html>

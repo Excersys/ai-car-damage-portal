@@ -59,10 +59,11 @@ class QueueStats:
     uploading: int = 0
     uploaded: int = 0
     failed: int = 0
+    dead_letter: int = 0
 
     @property
     def total(self) -> int:
-        return self.pending + self.uploading + self.uploaded + self.failed
+        return self.pending + self.uploading + self.uploaded + self.failed + self.dead_letter
 
 
 class UploadQueue:
@@ -150,17 +151,37 @@ class UploadQueue:
                 (item_id,),
             )
 
-    def mark_failed(self, item_id: str, error: str) -> None:
-        """Mark an item as failed and increment the attempt counter."""
+    def mark_failed(self, item_id: str, error: str, max_retries: int | None = None) -> bool:
+        """Mark an item as failed and increment the attempt counter.
+
+        If *max_retries* is provided and the item has exceeded it, the status
+        is set to ``'dead_letter'`` instead of ``'pending'``.
+
+        Returns ``True`` if the item was moved to dead-letter.
+        """
+        if max_retries is None:
+            max_retries = config.UPLOAD_MAX_RETRIES
+
         with self._conn() as conn:
+            row = conn.execute(
+                "SELECT attempts FROM upload_queue WHERE id = ?", (item_id,)
+            ).fetchone()
+            new_attempts = (row[0] if row else 0) + 1
+            new_status = "dead_letter" if new_attempts >= max_retries else "pending"
             conn.execute(
                 """
                 UPDATE upload_queue
-                SET status = 'pending', attempts = attempts + 1, last_error = ?
+                SET status = ?, attempts = ?, last_error = ?
                 WHERE id = ?
                 """,
-                (error, item_id),
+                (new_status, new_attempts, error, item_id),
             )
+            if new_status == "dead_letter":
+                logger.warning(
+                    "Item %s moved to dead-letter after %d attempts: %s",
+                    item_id, new_attempts, error,
+                )
+            return new_status == "dead_letter"
 
     def stats(self) -> QueueStats:
         """Return aggregate counts by status."""

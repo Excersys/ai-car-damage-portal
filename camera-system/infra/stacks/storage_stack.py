@@ -45,7 +45,7 @@ class StorageStack(cdk.Stack):
                 name="event_id", type=dynamodb.AttributeType.STRING
             ),
             sort_key=dynamodb.Attribute(
-                name="camera_id", type=dynamodb.AttributeType.STRING
+                name="camera_frame", type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=cdk.RemovalPolicy.RETAIN,

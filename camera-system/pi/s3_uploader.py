@@ -50,12 +50,18 @@ class S3Result:
 
 
 def s3_key_for(event_id: str, camera_id: str) -> str:
-    """Build the S3 object key for an image."""
-    return f"{event_id}/{camera_id}.jpg"
+    """Build the S3 object key matching the scans/ prefix expected by the
+    inference Lambda trigger (see ``inference_stack.py``)."""
+    return f"scans/unknown/{event_id}/{camera_id}/frame_0000.jpg"
 
 
-def upload_image(local_path: Path, s3_key: str, camera_id: str = "") -> S3Result:
+def upload_image(
+    local_path: Path, s3_key: str, camera_id: str = "", event_id: str = ""
+) -> S3Result:
     """Upload a single image file to S3."""
+    extra: dict = {}
+    if event_id:
+        extra["event_id"] = event_id
     try:
         _get_s3_client().upload_file(
             str(local_path),
@@ -63,7 +69,10 @@ def upload_image(local_path: Path, s3_key: str, camera_id: str = "") -> S3Result
             s3_key,
             ExtraArgs={"ContentType": "image/jpeg"},
         )
-        logger.info("Uploaded %s -> s3://%s/%s", local_path, config.S3_BUCKET, s3_key)
+        logger.info(
+            "Uploaded %s -> s3://%s/%s", local_path, config.S3_BUCKET, s3_key,
+            extra=extra,
+        )
         return S3Result(
             camera_id=camera_id,
             local_path=local_path,
@@ -71,7 +80,7 @@ def upload_image(local_path: Path, s3_key: str, camera_id: str = "") -> S3Result
             success=True,
         )
     except (BotoCoreError, ClientError, OSError) as exc:
-        logger.warning("Upload failed for %s: %s", s3_key, exc)
+        logger.warning("Upload failed for %s: %s", s3_key, exc, extra=extra)
         return S3Result(
             camera_id=camera_id,
             local_path=local_path,
@@ -100,7 +109,9 @@ def upload_event(
         futures = {}
         for cap in to_upload:
             s3_key = s3_key_for(event_id, cap.camera_id)
-            fut = pool.submit(upload_image, cap.local_path, s3_key, cap.camera_id)
+            fut = pool.submit(
+                upload_image, cap.local_path, s3_key, cap.camera_id, event_id
+            )
             futures[fut] = cap.camera_id
 
         for future in as_completed(futures):

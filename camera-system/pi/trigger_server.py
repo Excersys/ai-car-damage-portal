@@ -6,7 +6,9 @@ and exposes health/status endpoints.
 
 from __future__ import annotations
 
+import json as _json
 import logging
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -20,9 +22,31 @@ from s3_uploader import check_connectivity, s3_key_for, upload_event
 from upload_queue import UploadQueue
 from upload_worker import UploadWorker
 
+
+class _JSONFormatter(logging.Formatter):
+    """Structured JSON formatter for CloudWatch-compatible log parsing."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        entry: dict = {
+            "ts": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if hasattr(record, "event_id"):
+            entry["event_id"] = record.event_id
+        if hasattr(record, "metric"):
+            entry["metric"] = record.metric
+        if record.exc_info and record.exc_info[0]:
+            entry["exception"] = self.formatException(record.exc_info)
+        return _json.dumps(entry, default=str)
+
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(_JSONFormatter())
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL, logging.INFO),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[_handler],
 )
 logger = logging.getLogger(__name__)
 
@@ -91,6 +115,7 @@ class QueueStatusResponse(BaseModel):
     uploading: int
     uploaded: int
     failed: int
+    dead_letter: int
     total: int
 
 
@@ -115,14 +140,20 @@ async def trigger(payload: TriggerPayload):
     3) Queue any failures for background retry
     """
     event_id = generate_event_id()
+    extra = {"event_id": event_id}
     logger.info(
-        "Trigger received: sensor=%s event=%s", payload.sensor_id, event_id
+        "Trigger received: sensor=%s event=%s", payload.sensor_id, event_id,
+        extra=extra,
     )
 
+    t0 = time.monotonic()
     captures: list[CaptureResult] = capture_all(event_id)
+    capture_ms = (time.monotonic() - t0) * 1000
     captured_count = sum(1 for c in captures if c.success)
 
+    t1 = time.monotonic()
     s3_results = upload_event(event_id, captures)
+    upload_ms = (time.monotonic() - t1) * 1000
     uploaded_ids = {r.camera_id for r in s3_results if r.success}
     failed_results = [r for r in s3_results if not r.success]
 
@@ -149,12 +180,23 @@ async def trigger(payload: TriggerPayload):
             )
         )
 
+    q_stats = queue.stats()
     logger.info(
         "Event %s complete: captured=%d uploaded=%d queued=%d",
-        event_id,
-        captured_count,
-        len(uploaded_ids),
-        queued_count,
+        event_id, captured_count, len(uploaded_ids), queued_count,
+        extra={
+            "event_id": event_id,
+            "metric": {
+                "capture_ms": round(capture_ms, 1),
+                "upload_ms": round(upload_ms, 1),
+                "captured": captured_count,
+                "uploaded": len(uploaded_ids),
+                "failed": len(failed_results),
+                "queued": queued_count,
+                "queue_depth": q_stats.pending,
+                "queue_dead_letter": q_stats.dead_letter,
+            },
+        },
     )
 
     return TriggerResponse(
@@ -207,6 +249,7 @@ async def queue_status():
         uploading=s.uploading,
         uploaded=s.uploaded,
         failed=s.failed,
+        dead_letter=s.dead_letter,
         total=s.total,
     )
 

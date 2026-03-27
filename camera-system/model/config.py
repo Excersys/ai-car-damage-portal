@@ -49,7 +49,7 @@ SCAN_RESULTS_DIR: str = os.environ.get("SCAN_RESULTS_DIR", "/data/tunnel/scans")
 
 MODEL_ARTIFACT_S3_URI: str = os.environ.get(
     "MODEL_ARTIFACT_S3_URI",
-    "s3://your-model-bucket/tunnel-damage/model.tar.gz",
+    "",
 )
 
 ENDPOINT_NAME: str = os.environ.get("SAGEMAKER_ENDPOINT_NAME", "tunnel-damage-detection")
@@ -62,3 +62,5 @@ INFERENCE_IMAGE_URI: str = os.environ.get("SAGEMAKER_IMAGE_URI", "")
 CONFIDENCE_THRESHOLD: float = float(os.environ.get("CONFIDENCE_THRESHOLD", "0.6"))
 
 AWS_REGION: str = os.environ.get("AWS_REGION", "us-east-1")
+
+SAGEMAKER_EXECUTION_ROLE: str = os.environ.get("SAGEMAKER_EXECUTION_ROLE", "")

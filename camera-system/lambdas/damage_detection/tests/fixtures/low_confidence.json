@@ -1,0 +1,7 @@
+{
+  "confidence": 0.45,
+  "damage_type": "scratch",
+  "bounding_boxes": [
+    {"x": 200, "y": 150, "width": 80, "height": 10, "confidence": 0.45, "label": "scratch"}
+  ]
+}

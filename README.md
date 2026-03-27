@@ -311,45 +311,51 @@ The platform spans multiple AWS services across the rental app and camera system
 
 All work is tracked in the **ACR** project on Atlassian Jira.
 
-### Completed Epics (v1)
+### Completed Epics and Tasks (v1)
+
+Items confirmed as genuinely complete after a full code audit (March 2026).
 
 | Key | Name | Status |
 |-----|------|--------|
 | ACR-85 | AWS Infrastructure Setup | Done |
-| ACR-86 | Identity Verification Module | Done |
-| ACR-89 | Admin Dashboard | Done |
+| ACR-86 | Identity Verification Module | Done (v1 scaffold; production work under ACR-105) |
+| ACR-90 | Core AWS Infrastructure Setup | Done |
+| ACR-91 | CI/CD Pipeline Setup | Done (quality gates are a v2 concern under ACR-103) |
+| ACR-94 | Camera System Integration & Image Processing Pipeline | Done |
+| ACR-95 | AI Model Integration & Damage Analysis Engine | Done |
+| ACR-100 | Software Interface Design & Coding | Done |
+| ACR-101 | Design version 1 of website | Done |
+| ACR-102 | Combine and Organize GitHub Repositories | Done |
+
+### Reopened v1 Items (scaffold only, not production-ready)
+
+These were previously marked Done but contain only mock/hardcoded data. Reopened to To Do with explanatory comments.
+
+| Key | Name | Reason Reopened |
+|-----|------|-----------------|
+| ACR-87 | AI-Based Damage Detection System | Missing model artifacts, SageMaker endpoint not in CDK, no QC write endpoint |
+| ACR-88 | Rental Booking System | Vehicle search, booking, and confirmation all use mock data |
+| ACR-89 | Admin Dashboard | All admin pages use hardcoded mock data; RBAC broken |
+| ACR-92 | Third-Party SDK Integration & License Verification | Veriff is timers + random; no real SDK |
+| ACR-93 | Biometric Verification & Credit Check Integration | Entirely mock/demo |
+| ACR-96 | Vehicle Search, Availability & Booking Flow | CarsPage uses hardcoded mockCars; confirmation page broken |
+| ACR-97 | Payment Integration & Digital Agreement System | Agreements not implemented; frontend mocks in dev |
+| ACR-98 | Admin Dashboard with Role-Based Access Control | Mock data; Cognito custom:role not in CDK |
 
 ### Active Delivery Epics (v2)
 
-| Key | Name |
-|-----|------|
-| ACR-103 | Platform foundations and environment parity |
-| ACR-104 | Rental commerce core |
-| ACR-105 | Identity verification, authentication, and agreement flow |
-| ACR-106 | Payments, charges, and booking finalization |
-| ACR-107 | Tunnel detection and capture reliability |
-| ACR-108 | Damage model inference and inspection event pipeline |
-| ACR-109 | Portal review, QC, and vehicle inspection operations |
-| ACR-110 | Unified data model and cross-system linking |
-| ACR-111 | Security, compliance, monitoring, and launch readiness |
-| ACR-145 | Admin |
-
-### Key Completed Tasks
-
-| Key | Name |
-|-----|------|
-| ACR-90 | Core AWS Infrastructure Setup |
-| ACR-91 | CI/CD Pipeline Setup |
-| ACR-92 | Third-Party SDK Integration & License Verification |
-| ACR-93 | Biometric Verification & Credit Check Integration |
-| ACR-94 | Camera System Integration & Image Processing Pipeline |
-| ACR-95 | AI Model Integration & Damage Analysis Engine |
-| ACR-96 | Vehicle Search, Availability & Booking Flow |
-| ACR-97 | Payment Integration & Digital Agreement System |
-| ACR-98 | Admin Dashboard with Role-Based Access Control |
-| ACR-100 | Software Interface Design & Coding |
-| ACR-101 | Design version 1 of website |
-| ACR-102 | Combine and Organize GitHub Repositories |
+| Key | Name | Priority |
+|-----|------|----------|
+| ACR-103 | Platform foundations and environment parity | Highest |
+| ACR-104 | Rental commerce core | High |
+| ACR-105 | Identity verification, authentication, and agreement flow | High |
+| ACR-106 | Payments, charges, and booking finalization | High |
+| ACR-107 | Tunnel detection and capture reliability | High |
+| ACR-108 | Damage model inference and inspection event pipeline | High |
+| ACR-109 | Portal review, QC, and vehicle inspection operations | High |
+| ACR-110 | Unified data model and cross-system linking | High |
+| ACR-111 | Security, compliance, monitoring, and launch readiness | Highest |
+| ACR-145 | Admin | Medium |
 
 ---
 

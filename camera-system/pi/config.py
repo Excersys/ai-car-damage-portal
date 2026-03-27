@@ -14,6 +14,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 AWS_REGION: str = os.environ.get("AWS_REGION", "us-east-1")
+# CDK creates the bucket as "tunnel-images-{ACCOUNT_ID}"; set via env var.
 S3_BUCKET: str = os.environ.get("S3_BUCKET", "tunnel-images")
 
 LOCAL_STORAGE_PATH: Path = Path(
@@ -37,6 +38,7 @@ UPLOAD_WORKER_INTERVAL_S: float = float(
 UPLOAD_WORKER_BACKOFF_MAX_S: float = float(
     os.environ.get("UPLOAD_WORKER_BACKOFF_MAX_S", "300.0")
 )
+UPLOAD_MAX_RETRIES: int = int(os.environ.get("UPLOAD_MAX_RETRIES", "5"))
 
 SERVER_HOST: str = os.environ.get("SERVER_HOST", "0.0.0.0")
 SERVER_PORT: int = int(os.environ.get("SERVER_PORT", "8000"))

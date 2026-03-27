@@ -121,17 +121,24 @@ def _wait_for_endpoint(endpoint_name: str, timeout_minutes: int = 15) -> None:
 
 
 def _get_execution_role() -> str:
-    """Get the SageMaker execution role ARN from the environment or IAM."""
-    role = cfg.__dict__.get("SAGEMAKER_EXECUTION_ROLE", "")
-    if not role:
-        sts = boto3.client("sts", region_name=cfg.AWS_REGION)
-        account_id = sts.get_caller_identity()["Account"]
-        role = f"arn:aws:iam::{account_id}:role/SageMakerExecutionRole"
-        logger.warning("Using default role: %s (create it if it doesn't exist)", role)
+    """Get the SageMaker execution role ARN from env or derive from account ID."""
+    if cfg.SAGEMAKER_EXECUTION_ROLE:
+        return cfg.SAGEMAKER_EXECUTION_ROLE
+    sts = boto3.client("sts", region_name=cfg.AWS_REGION)
+    account_id = sts.get_caller_identity()["Account"]
+    role = f"arn:aws:iam::{account_id}:role/TunnelSageMakerExecutionRole"
+    logger.warning("Using default role: %s (create it if it doesn't exist)", role)
     return role
 
 
 def main() -> None:
+    if not cfg.MODEL_ARTIFACT_S3_URI:
+        logger.error(
+            "MODEL_ARTIFACT_S3_URI is required. Upload your model.tar.gz to S3 first "
+            "and set the env var (see scripts/upload_model.sh)."
+        )
+        sys.exit(1)
+
     image_uri = _get_or_default_image_uri()
     model_name = cfg.ENDPOINT_NAME
     config_name = f"{cfg.ENDPOINT_NAME}-config"

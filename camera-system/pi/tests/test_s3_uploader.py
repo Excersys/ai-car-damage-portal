@@ -14,7 +14,7 @@ from s3_uploader import S3Result, check_connectivity, s3_key_for, upload_event, 
 
 class TestS3KeyFor:
     def test_format(self):
-        assert s3_key_for("evt123", "usb_0") == "evt123/usb_0.jpg"
+        assert s3_key_for("evt123", "usb_0") == "scans/unknown/evt123/usb_0/frame_0000.jpg"
 
 
 class TestUploadImage:

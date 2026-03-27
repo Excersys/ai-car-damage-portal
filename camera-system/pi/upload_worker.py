@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 import config
 from s3_uploader import check_connectivity, upload_image
@@ -87,31 +88,49 @@ class UploadWorker:
             return 0
 
         uploaded = 0
+        dead_lettered = 0
         for item in batch:
+            extra = {"event_id": item.event_id}
+            t0 = time.monotonic()
             result = await asyncio.to_thread(
                 upload_image,
                 item.local_path,
                 item.s3_key,
                 item.camera_id,
             )
+            elapsed_ms = (time.monotonic() - t0) * 1000
+
             if result.success:
                 self._queue.mark_uploaded(item.id)
                 uploaded += 1
                 logger.info(
-                    "Queue upload succeeded: %s (attempt %d)",
-                    item.s3_key,
-                    item.attempts + 1,
+                    "Queue upload succeeded: %s (attempt %d, %.0fms)",
+                    item.s3_key, item.attempts + 1, elapsed_ms,
+                    extra={**extra, "metric": {
+                        "retry_upload_ms": round(elapsed_ms, 1),
+                        "attempt": item.attempts + 1,
+                    }},
                 )
             else:
-                self._queue.mark_failed(item.id, result.error)
+                is_dead = self._queue.mark_failed(item.id, result.error)
+                if is_dead:
+                    dead_lettered += 1
                 logger.warning(
                     "Queue upload failed: %s (attempt %d): %s",
-                    item.s3_key,
-                    item.attempts + 1,
-                    result.error,
+                    item.s3_key, item.attempts + 1, result.error,
+                    extra={**extra, "metric": {
+                        "retry_upload_ms": round(elapsed_ms, 1),
+                        "attempt": item.attempts + 1,
+                        "dead_lettered": is_dead,
+                    }},
                 )
 
         if uploaded:
             self._queue.cleanup_uploaded(delete_files=False)
+
+        if dead_lettered:
+            logger.warning(
+                "%d items moved to dead-letter this batch", dead_lettered,
+            )
 
         return uploaded

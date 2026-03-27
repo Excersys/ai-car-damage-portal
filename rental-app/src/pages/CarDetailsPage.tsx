@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
+
+import type { VehicleSearchResult } from '../types/vehicleSearch'
 
 // Import car images
 import teslaModel3 from '../images/SFAR.rendition.vlarge.png'
@@ -8,9 +10,45 @@ import toyotaCamry from '../images/CCAR.rendition.vlarge.png'
 import fordExplorer from '../images/FRAR.rendition.vlarge.png'
 import jeepWrangler from '../images/IJAR.rendition.vlarge.png'
 
+function detailCarFromSearch(v: VehicleSearchResult) {
+  const primary = v.images?.[0]?.trim() ? v.images[0] : toyotaCamry
+  const imgs = (v.images || []).filter((u) => u?.trim())
+  const gallery = imgs.length ? imgs : [primary]
+  return {
+    id: v.id,
+    make: v.make,
+    model: v.model,
+    year: v.year,
+    price: v.pricePerDay,
+    image: primary,
+    gallery,
+    features: v.features.map((f) =>
+      f.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+    ),
+    specs: {
+      engine: v.fuelType === 'electric' ? 'Electric motor' : 'Gasoline',
+      transmission: v.transmission.charAt(0).toUpperCase() + v.transmission.slice(1),
+      fuelType: v.fuelType.charAt(0).toUpperCase() + v.fuelType.slice(1),
+      seats: v.passengers,
+      doors: 4,
+      luggage: `${v.luggage} bags`,
+      ...(v.mpg ? { mpg: `${v.mpg} MPG (est.)` } : {}),
+      ...(v.range ? { range: `${v.range} miles (est.)` } : {}),
+    },
+    description: `Rent this ${v.make} ${v.model} (${v.year}).`,
+    location: v.location
+      .split('-')
+      .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+      .join(' '),
+    rating: v.rating,
+    reviews: v.reviewCount,
+  }
+}
+
 const CarDetailsPage: React.FC = () => {
   const { carId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   
   // Mock car data - in real app, this would come from API
   const mockCars: { [key: string]: any } = {
@@ -240,7 +278,9 @@ const CarDetailsPage: React.FC = () => {
     }
   }
 
-  const car = mockCars[carId || '1']
+  const fromSearch = (location.state as { searchVehicle?: VehicleSearchResult } | null)?.searchVehicle
+  const car =
+    fromSearch && fromSearch.id === carId ? detailCarFromSearch(fromSearch) : mockCars[carId || '1']
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const [selectedOptions, setSelectedOptions] = useState<{[key: string]: boolean}>({})
   

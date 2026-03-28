@@ -9,6 +9,7 @@ import aws_cdk as cdk
 from aws_cdk import (
     aws_iam as iam,
     aws_s3 as s3,
+    aws_ssm as ssm,
 )
 
 
@@ -20,6 +21,7 @@ class SageMakerRoleStack(cdk.Stack):
         scope: Construct,
         construct_id: str,
         *,
+        env_name: str = "dev",
         image_bucket: s3.IBucket,
         **kwargs,
     ) -> None:
@@ -28,7 +30,7 @@ class SageMakerRoleStack(cdk.Stack):
         self.execution_role = iam.Role(
             self,
             "TunnelSageMakerExecutionRole",
-            role_name="TunnelSageMakerExecutionRole",
+            role_name=f"TunnelSageMakerExecutionRole-{env_name}",
             assumed_by=iam.ServicePrincipal("sagemaker.amazonaws.com"),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name(
@@ -55,4 +57,12 @@ class SageMakerRoleStack(cdk.Stack):
             "ExecutionRoleArn",
             value=self.execution_role.role_arn,
             description="SageMaker execution role ARN — set as SAGEMAKER_EXECUTION_ROLE",
+        )
+
+        ssm.StringParameter(
+            self,
+            "SSMSageMakerRoleArn",
+            parameter_name=f"/acr/{env_name}/tunnel/sagemaker-role-arn",
+            string_value=self.execution_role.role_arn,
+            description="Tunnel SageMaker execution role ARN",
         )

@@ -1,0 +1,14 @@
+{
+  "dev": {
+    "account": "205930602913",
+    "region": "us-east-1"
+  },
+  "staging": {
+    "account": "205930602913",
+    "region": "us-east-1"
+  },
+  "production": {
+    "account": "REPLACE_WITH_PROD_ACCOUNT_ID",
+    "region": "us-east-1"
+  }
+}

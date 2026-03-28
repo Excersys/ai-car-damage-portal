@@ -9,6 +9,7 @@ from aws_cdk import (
     aws_dynamodb as dynamodb,
     aws_lambda as _lambda,
     aws_s3 as s3,
+    aws_ssm as ssm,
 )
 
 
@@ -20,6 +21,7 @@ class ApiStack(cdk.Stack):
         scope: Construct,
         construct_id: str,
         *,
+        env_name: str = "dev",
         image_bucket: s3.IBucket,
         events_table: dynamodb.ITable,
         **kwargs,
@@ -29,7 +31,7 @@ class ApiStack(cdk.Stack):
         self.review_fn = _lambda.Function(
             self,
             "ReviewApiFn",
-            function_name="TunnelReviewApi",
+            function_name=f"TunnelReviewApi-{env_name}",
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="handler.lambda_handler",
             code=_lambda.Code.from_asset("../lambdas/review_api"),
@@ -48,16 +50,19 @@ class ApiStack(cdk.Stack):
         api = apigw.RestApi(
             self,
             "TunnelApi",
-            rest_api_name="TunnelDamageDetectionAPI",
+            rest_api_name=f"TunnelDamageDetectionAPI-{env_name}",
             description="API for reviewing tunnel car damage detection results",
             deploy_options=apigw.StageOptions(stage_name="v1"),
         )
 
-        api_key = api.add_api_key("TunnelApiKey", api_key_name="tunnel-api-key")
+        api_key = api.add_api_key(
+            "TunnelApiKey",
+            api_key_name=f"tunnel-api-key-{env_name}",
+        )
 
         plan = api.add_usage_plan(
             "TunnelUsagePlan",
-            name="TunnelStandard",
+            name=f"TunnelStandard-{env_name}",
             throttle=apigw.ThrottleSettings(rate_limit=50, burst_limit=100),
         )
         plan.add_api_key(api_key)
@@ -74,3 +79,18 @@ class ApiStack(cdk.Stack):
         )
 
         cdk.CfnOutput(self, "ApiUrl", value=api.url)
+
+        ssm.StringParameter(
+            self,
+            "SSMApiUrl",
+            parameter_name=f"/acr/{env_name}/tunnel/api-url",
+            string_value=api.url,
+            description="Tunnel API Gateway URL",
+        )
+        ssm.StringParameter(
+            self,
+            "SSMApiKeyId",
+            parameter_name=f"/acr/{env_name}/tunnel/api-key-id",
+            string_value=api_key.key_id,
+            description="Tunnel API key ID",
+        )

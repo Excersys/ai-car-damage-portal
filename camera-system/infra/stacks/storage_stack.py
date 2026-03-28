@@ -7,23 +7,34 @@ import aws_cdk as cdk
 from aws_cdk import (
     aws_dynamodb as dynamodb,
     aws_s3 as s3,
+    aws_ssm as ssm,
 )
 
 
 class StorageStack(cdk.Stack):
     """S3 bucket and DynamoDB table for tunnel damage detection."""
 
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        *,
+        env_name: str = "dev",
+        **kwargs,
+    ) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        is_prod = env_name == "prod"
 
         self.image_bucket = s3.Bucket(
             self,
             "TunnelImagesBucket",
-            bucket_name=f"tunnel-images-{cdk.Aws.ACCOUNT_ID}",
+            bucket_name=f"tunnel-images-{env_name}-{cdk.Aws.ACCOUNT_ID}",
             versioned=True,
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             encryption=s3.BucketEncryption.S3_MANAGED,
-            removal_policy=cdk.RemovalPolicy.RETAIN,
+            removal_policy=cdk.RemovalPolicy.RETAIN if is_prod else cdk.RemovalPolicy.DESTROY,
+            event_bridge_enabled=True,
             lifecycle_rules=[
                 s3.LifecycleRule(
                     id="archive-old-images",
@@ -43,7 +54,7 @@ class StorageStack(cdk.Stack):
         self.events_table = dynamodb.Table(
             self,
             "TunnelDamageEvents",
-            table_name="tunnel_damage_events",
+            table_name=f"tunnel_damage_events_{env_name}",
             partition_key=dynamodb.Attribute(
                 name="event_id", type=dynamodb.AttributeType.STRING
             ),
@@ -51,9 +62,24 @@ class StorageStack(cdk.Stack):
                 name="camera_frame", type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            removal_policy=cdk.RemovalPolicy.RETAIN,
+            removal_policy=cdk.RemovalPolicy.RETAIN if is_prod else cdk.RemovalPolicy.DESTROY,
             point_in_time_recovery=True,
         )
 
         cdk.CfnOutput(self, "BucketName", value=self.image_bucket.bucket_name)
         cdk.CfnOutput(self, "TableName", value=self.events_table.table_name)
+
+        ssm.StringParameter(
+            self,
+            "SSMBucketName",
+            parameter_name=f"/acr/{env_name}/tunnel/bucket-name",
+            string_value=self.image_bucket.bucket_name,
+            description="Tunnel S3 bucket name",
+        )
+        ssm.StringParameter(
+            self,
+            "SSMTableName",
+            parameter_name=f"/acr/{env_name}/tunnel/table-name",
+            string_value=self.events_table.table_name,
+            description="Tunnel DynamoDB table name",
+        )

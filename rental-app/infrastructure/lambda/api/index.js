@@ -1,15 +1,19 @@
 const AWS = require('aws-sdk');
 const axios = require('axios');
-const stripe = require('stripe');
 const jwt = require('jsonwebtoken');
 const jwkToPem = require('jwk-to-pem');
+const {
+  ensureThirdPartyConfig,
+  getStripeClient,
+  thirdParty
+} = require('./thirdPartyConfig');
 
 // Initialize AWS services
 const secretsManager = new AWS.SecretsManager();
 const s3 = new AWS.S3();
 const cognito = new AWS.CognitoIdentityServiceProvider();
 
-// Environment variables
+// Environment variables (secrets load at runtime — see thirdPartyConfig.js)
 const {
   USER_POOL_ID,
   USER_POOL_CLIENT_ID,
@@ -17,19 +21,8 @@ const {
   IMAGES_BUCKET_NAME,
   STATIC_BUCKET_NAME,
   ENVIRONMENT,
-  EXPERIAN_API_KEY,
-  EXPERIAN_API_SECRET,
-  EXPERIAN_BASE_URL,
-  STRIPE_SECRET_KEY,
-  STRIPE_PUBLISHABLE_KEY,
-  STRIPE_WEBHOOK_SECRET,
-  STRIPE_API_VERSION
+  EXPERIAN_BASE_URL
 } = process.env;
-
-// Initialize Stripe
-const stripeClient = stripe(STRIPE_SECRET_KEY, {
-  apiVersion: STRIPE_API_VERSION,
-});
 
 // CORS headers
 const corsHeaders = {
@@ -195,11 +188,11 @@ const experianApi = {
           baseUrl: 'https://sandbox.experian.com/api'
         };
       }
-      
-      // In production, get real credentials from environment or secrets
+
+      await ensureThirdPartyConfig(secretsManager);
       return {
-        apiKey: EXPERIAN_API_KEY,
-        apiSecret: EXPERIAN_API_SECRET,
+        apiKey: thirdParty.experianKey,
+        apiSecret: thirdParty.experianSecret,
         baseUrl: EXPERIAN_BASE_URL || 'https://api.experian.com'
       };
     } catch (error) {
@@ -1517,7 +1510,7 @@ const handlers = {
 
     try {
       // Create payment intent with Stripe
-      const paymentIntent = await stripeClient.paymentIntents.create({
+      const paymentIntent = await getStripeClient().paymentIntents.create({
         amount: Math.round(amount * 100), // Convert to cents
         currency: currency.toLowerCase(),
         metadata: {
@@ -1538,7 +1531,7 @@ const handlers = {
         amount: paymentIntent.amount,
         currency: paymentIntent.currency,
         status: paymentIntent.status,
-        publishableKey: STRIPE_PUBLISHABLE_KEY
+        publishableKey: thirdParty.publishableKey
       });
 
     } catch (error) {
@@ -1567,7 +1560,7 @@ const handlers = {
         return_url: returnUrl || `https://${event.headers.Host}/payment/return`
       };
 
-      const paymentIntent = await stripeClient.paymentIntents.confirm(
+      const paymentIntent = await getStripeClient().paymentIntents.confirm(
         paymentIntentId,
         confirmParams
       );
@@ -1610,7 +1603,7 @@ const handlers = {
         captureParams.amount_to_capture = Math.round(amountToCapture * 100);
       }
 
-      const paymentIntent = await stripeClient.paymentIntents.capture(
+      const paymentIntent = await getStripeClient().paymentIntents.capture(
         paymentIntentId,
         captureParams
       );
@@ -1644,7 +1637,7 @@ const handlers = {
     }
 
     try {
-      const paymentIntent = await stripeClient.paymentIntents.retrieve(paymentIntentId);
+      const paymentIntent = await getStripeClient().paymentIntents.retrieve(paymentIntentId);
 
       return createResponse(200, {
         paymentIntent: {
@@ -1693,7 +1686,7 @@ const handlers = {
         refundParams.amount = Math.round(amount * 100); // Convert to cents
       }
 
-      const refund = await stripeClient.refunds.create(refundParams);
+      const refund = await getStripeClient().refunds.create(refundParams);
 
       return createResponse(200, {
         refund: {
@@ -1728,20 +1721,20 @@ const handlers = {
 
     try {
       // Attach payment method to customer
-      await stripeClient.paymentMethods.attach(paymentMethodId, {
+      await getStripeClient().paymentMethods.attach(paymentMethodId, {
         customer: customerId,
       });
 
       // Set as default if requested
       if (isDefault) {
-        await stripeClient.customers.update(customerId, {
+        await getStripeClient().customers.update(customerId, {
           invoice_settings: {
             default_payment_method: paymentMethodId,
           },
         });
       }
 
-      const paymentMethod = await stripeClient.paymentMethods.retrieve(paymentMethodId);
+      const paymentMethod = await getStripeClient().paymentMethods.retrieve(paymentMethodId);
 
       return createResponse(200, {
         paymentMethod: {
@@ -1772,7 +1765,7 @@ const handlers = {
     }
 
     try {
-      const paymentMethods = await stripeClient.paymentMethods.list({
+      const paymentMethods = await getStripeClient().paymentMethods.list({
         customer: customerId,
         type: 'card',
       });
@@ -1807,7 +1800,7 @@ const handlers = {
     }
 
     try {
-      await stripeClient.paymentMethods.detach(paymentMethodId);
+      await getStripeClient().paymentMethods.detach(paymentMethodId);
 
       return createResponse(200, {
         message: 'Payment method deleted successfully',
@@ -1830,7 +1823,7 @@ const handlers = {
     let stripeEvent;
 
     try {
-      stripeEvent = stripeClient.webhooks.constructEvent(event.body, sig, STRIPE_WEBHOOK_SECRET);
+      stripeEvent = getStripeClient().webhooks.constructEvent(event.body, sig, thirdParty.webhookSecret);
     } catch (err) {
       console.error('Webhook signature verification failed:', err.message);
       return createResponse(400, { error: 'Invalid signature' });
@@ -2815,6 +2808,8 @@ exports.handler = async (event, context) => {
     if (event.httpMethod === 'OPTIONS') {
       return createResponse(200, {});
     }
+
+    await ensureThirdPartyConfig(secretsManager);
 
     // Authenticate request
     const authResult = await authHelpers.authenticate(event);

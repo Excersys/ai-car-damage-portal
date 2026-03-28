@@ -1,5 +1,6 @@
 """
-Inference stack: DamageDetection Lambda triggered by S3 ObjectCreated events.
+Inference stack: DamageDetection Lambda triggered by S3 ObjectCreated events
+via EventBridge (avoids cross-stack circular dependency with the bucket).
 Invokes a SageMaker endpoint and writes results to DynamoDB.
 """
 
@@ -8,7 +9,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Repo root ``camera-system`` (for shared path constants).
 _CS_ROOT = Path(__file__).resolve().parents[2]
 if str(_CS_ROOT) not in sys.path:
     sys.path.insert(0, str(_CS_ROOT))
@@ -19,10 +19,11 @@ from constructs import Construct
 import aws_cdk as cdk
 from aws_cdk import (
     aws_dynamodb as dynamodb,
+    aws_events as events,
+    aws_events_targets as targets,
     aws_iam as iam,
     aws_lambda as _lambda,
     aws_s3 as s3,
-    aws_s3_notifications as s3n,
 )
 
 
@@ -34,6 +35,7 @@ class InferenceStack(cdk.Stack):
         scope: Construct,
         construct_id: str,
         *,
+        env_name: str = "dev",
         image_bucket: s3.IBucket,
         events_table: dynamodb.ITable,
         **kwargs,
@@ -59,7 +61,7 @@ class InferenceStack(cdk.Stack):
         self.damage_detection_fn = _lambda.Function(
             self,
             "DamageDetectionFn",
-            function_name="TunnelDamageDetection",
+            function_name=f"TunnelDamageDetection-{env_name}",
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="handler.lambda_handler",
             code=_lambda.Code.from_asset("../lambdas/damage_detection"),
@@ -85,11 +87,21 @@ class InferenceStack(cdk.Stack):
             )
         )
 
-        image_bucket.add_event_notification(
-            s3.EventType.OBJECT_CREATED,
-            s3n.LambdaDestination(self.damage_detection_fn),
-            s3.NotificationKeyFilter(
-                prefix=INFERENCE_S3_NOTIFICATION_PREFIX,
-                suffix=".jpg",
+        # EventBridge rule triggers the Lambda on S3 ObjectCreated events
+        # for JPEG uploads under the scans/ prefix. This avoids the
+        # cross-stack circular dependency that S3 bucket notifications cause.
+        prefix = INFERENCE_S3_NOTIFICATION_PREFIX
+        events.Rule(
+            self,
+            "S3ObjectCreatedRule",
+            rule_name=f"tunnel-scan-uploaded-{env_name}",
+            event_pattern=events.EventPattern(
+                source=["aws.s3"],
+                detail_type=["Object Created"],
+                detail={
+                    "bucket": {"name": [image_bucket.bucket_name]},
+                    "object": {"key": [{"prefix": prefix}, {"suffix": ".jpg"}]},
+                },
             ),
+            targets=[targets.LambdaFunction(self.damage_detection_fn)],
         )

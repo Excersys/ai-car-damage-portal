@@ -72,6 +72,8 @@ jobs:
           pip install pytest boto3 moto
 
       - name: Run tunnel Lambda tests
+        env:
+          AWS_DEFAULT_REGION: us-east-1
         run: |
           python -m pytest lambdas/review_api/tests/ -q --tb=short
           python -m pytest lambdas/damage_detection/tests/ -q --tb=short
@@ -446,7 +448,7 @@ jobs:
   rollback:
     name: Rollback Production
     runs-on: ubuntu-latest
-    if: failure() && github.ref == 'refs/heads/main'
+    if: ${{ always() && needs.deploy-production.result == 'failure' && github.ref == 'refs/heads/main' }}
     needs: [deploy-production]
     environment: production
     steps:

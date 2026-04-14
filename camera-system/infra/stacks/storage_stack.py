@@ -1,43 +1,40 @@
 """
-Storage stack: S3 bucket, DynamoDB table, and damage-detection Lambda (same stack
-as the bucket so S3 event notifications do not create a cross-stack dependency cycle).
+Storage stack: S3 bucket for tunnel images and DynamoDB table for damage events.
 """
-
-from typing import Optional
 
 from constructs import Construct
 import aws_cdk as cdk
 from aws_cdk import (
     aws_dynamodb as dynamodb,
-    aws_iam as iam,
-    aws_lambda as _lambda,
     aws_s3 as s3,
-    aws_s3_notifications as s3n,
+    aws_ssm as ssm,
 )
 
 
 class StorageStack(cdk.Stack):
-    """S3 bucket, DynamoDB table, and Lambda processing for tunnel damage detection."""
+    """S3 bucket and DynamoDB table for tunnel damage detection."""
 
     def __init__(
         self,
         scope: Construct,
         construct_id: str,
         *,
-        grant_sagemaker_invoke: bool = True,
-        onnx_layer_arn: Optional[str] = None,
+        env_name: str = "dev",
         **kwargs,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
+        is_prod = env_name == "prod"
+
         self.image_bucket = s3.Bucket(
             self,
             "TunnelImagesBucket",
-            bucket_name=f"tunnel-images-{cdk.Aws.ACCOUNT_ID}",
+            bucket_name=f"tunnel-images-{env_name}-{cdk.Aws.ACCOUNT_ID}",
             versioned=True,
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             encryption=s3.BucketEncryption.S3_MANAGED,
-            removal_policy=cdk.RemovalPolicy.RETAIN,
+            removal_policy=cdk.RemovalPolicy.RETAIN if is_prod else cdk.RemovalPolicy.DESTROY,
+            event_bridge_enabled=True,
             lifecycle_rules=[
                 s3.LifecycleRule(
                     id="archive-old-images",
@@ -51,11 +48,10 @@ class StorageStack(cdk.Stack):
             ],
         )
 
-        # Sort key: one row per frame — "{camera_id}#{frame_stem}" e.g. rtsp_0#frame_0001
         self.events_table = dynamodb.Table(
             self,
             "TunnelDamageEvents",
-            table_name="tunnel_damage_events",
+            table_name=f"tunnel_damage_events_{env_name}",
             partition_key=dynamodb.Attribute(
                 name="event_id", type=dynamodb.AttributeType.STRING
             ),
@@ -63,91 +59,26 @@ class StorageStack(cdk.Stack):
                 name="camera_frame", type=dynamodb.AttributeType.STRING
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            removal_policy=cdk.RemovalPolicy.RETAIN,
+            removal_policy=cdk.RemovalPolicy.RETAIN if is_prod else cdk.RemovalPolicy.DESTROY,
             point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
                 point_in_time_recovery_enabled=True,
             ),
         )
 
-        sagemaker_endpoint_name = cdk.CfnParameter(
-            self,
-            "SageMakerEndpointName",
-            type="String",
-            default="tunnel-damage-detection",
-            description="Name of the SageMaker real-time inference endpoint",
-        )
-
-        confidence_threshold = cdk.CfnParameter(
-            self,
-            "ConfidenceThreshold",
-            type="String",
-            default="0.6",
-            description="Minimum confidence score to flag damage",
-        )
-
-        inference_mode = cdk.CfnParameter(
-            self,
-            "InferenceMode",
-            type="String",
-            default="sagemaker",
-            allowed_values=["sagemaker", "onnx", "stub"],
-            description="sagemaker=SageMaker endpoint; onnx=CPU ONNX in Lambda; stub=placeholder output",
-        )
-
-        onnx_model_path = cdk.CfnParameter(
-            self,
-            "OnnxModelPath",
-            type="String",
-            default="/opt/models/model.onnx",
-            description="Filesystem path to the ONNX model when InferenceMode=onnx",
-        )
-
-        layers = []
-        if onnx_layer_arn:
-            layers.append(
-                _lambda.LayerVersion.from_layer_version_arn(
-                    self, "DamageDetectionOnnxLayer", onnx_layer_arn
-                )
-            )
-
-        self.damage_detection_fn = _lambda.Function(
-            self,
-            "DamageDetectionFn",
-            function_name="TunnelDamageDetection",
-            runtime=_lambda.Runtime.PYTHON_3_11,
-            handler="handler.lambda_handler",
-            code=_lambda.Code.from_asset("../lambdas/damage_detection"),
-            layers=layers,
-            memory_size=1024,
-            timeout=cdk.Duration.seconds(60),
-            environment={
-                "INFERENCE_MODE": inference_mode.value_as_string,
-                "SAGEMAKER_ENDPOINT": sagemaker_endpoint_name.value_as_string,
-                "ONNX_MODEL_PATH": onnx_model_path.value_as_string,
-                "DYNAMODB_TABLE": self.events_table.table_name,
-                "CONFIDENCE_THRESHOLD": confidence_threshold.value_as_string,
-            },
-        )
-
-        self.image_bucket.grant_read(self.damage_detection_fn)
-        self.events_table.grant_write_data(self.damage_detection_fn)
-
-        if grant_sagemaker_invoke:
-            self.damage_detection_fn.add_to_role_policy(
-                iam.PolicyStatement(
-                    actions=["sagemaker:InvokeEndpoint"],
-                    resources=[
-                        f"arn:aws:sagemaker:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}"
-                        f":endpoint/{sagemaker_endpoint_name.value_as_string}",
-                    ],
-                )
-            )
-
-        self.image_bucket.add_event_notification(
-            s3.EventType.OBJECT_CREATED,
-            s3n.LambdaDestination(self.damage_detection_fn),
-            s3.NotificationKeyFilter(prefix="scans/", suffix=".jpg"),
-        )
-
         cdk.CfnOutput(self, "BucketName", value=self.image_bucket.bucket_name)
         cdk.CfnOutput(self, "TableName", value=self.events_table.table_name)
+
+        ssm.StringParameter(
+            self,
+            "SSMBucketName",
+            parameter_name=f"/acr/{env_name}/tunnel/bucket-name",
+            string_value=self.image_bucket.bucket_name,
+            description="Tunnel S3 bucket name",
+        )
+        ssm.StringParameter(
+            self,
+            "SSMTableName",
+            parameter_name=f"/acr/{env_name}/tunnel/table-name",
+            string_value=self.events_table.table_name,
+            description="Tunnel DynamoDB table name",
+        )

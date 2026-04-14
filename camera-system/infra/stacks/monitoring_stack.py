@@ -18,6 +18,7 @@ class MonitoringStack(cdk.Stack):
         scope: Construct,
         construct_id: str,
         *,
+        env_name: str = "dev",
         inference_lambda: _lambda.IFunction,
         review_lambda: _lambda.IFunction,
         **kwargs,
@@ -27,7 +28,7 @@ class MonitoringStack(cdk.Stack):
         cw.Alarm(
             self,
             "InferenceLambdaErrors",
-            alarm_name="TunnelInference-Errors",
+            alarm_name=f"TunnelInference-Errors-{env_name}",
             metric=inference_lambda.metric_errors(period=cdk.Duration.minutes(5)),
             evaluation_periods=1,
             threshold=1,
@@ -38,7 +39,7 @@ class MonitoringStack(cdk.Stack):
         cw.Alarm(
             self,
             "InferenceLambdaDuration",
-            alarm_name="TunnelInference-HighLatency",
+            alarm_name=f"TunnelInference-HighLatency-{env_name}",
             metric=inference_lambda.metric_duration(
                 period=cdk.Duration.minutes(5),
                 statistic="p99",
@@ -52,7 +53,7 @@ class MonitoringStack(cdk.Stack):
         cw.Alarm(
             self,
             "ReviewLambdaErrors",
-            alarm_name="TunnelReviewApi-Errors",
+            alarm_name=f"TunnelReviewApi-Errors-{env_name}",
             metric=review_lambda.metric_errors(period=cdk.Duration.minutes(5)),
             evaluation_periods=1,
             threshold=3,
@@ -63,7 +64,7 @@ class MonitoringStack(cdk.Stack):
         dashboard = cw.Dashboard(
             self,
             "TunnelDashboard",
-            dashboard_name="TunnelDamageDetection",
+            dashboard_name=f"TunnelDamageDetection-{env_name}",
         )
 
         dashboard.add_widgets(

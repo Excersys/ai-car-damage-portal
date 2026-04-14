@@ -198,7 +198,7 @@ const AdminFleetPage: React.FC = () => {
     let cancelled = false
     ;(async () => {
       const rows = await fetchAdminVehicles()
-      if (cancelled || !rows?.length) return
+      if (cancelled || rows === null) return
       setFleet(rows.map(mapApiVehicle))
     })()
     return () => {

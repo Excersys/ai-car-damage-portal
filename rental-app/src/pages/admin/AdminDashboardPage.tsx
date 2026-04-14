@@ -5,7 +5,57 @@ import {
   isTunnelReviewConfigured,
   type TunnelEventSummary,
 } from '../../lib/tunnelReviewApi'
-import { fetchAdminDashboard } from '../../lib/adminApi'
+import { fetchAdminDashboard, type AdminDashboardPayload } from '../../lib/adminApi'
+
+function formatRelativeTime(iso: string): string {
+  try {
+    const d = new Date(iso)
+    const diff = Date.now() - d.getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return 'just now'
+    if (mins < 60) return `${mins} min ago`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `${hours} hr ago`
+    return d.toLocaleDateString()
+  } catch {
+    return iso
+  }
+}
+
+/** Map API activity types to icon bucket used by the dashboard UI. */
+function mapApiActivityType(apiType: string): string {
+  const t = apiType.toLowerCase()
+  if (t.includes('verification') || t.includes('risk')) return 'damage'
+  if (t.includes('payment') || t.includes('return')) return 'return'
+  return 'booking'
+}
+
+function mapSeverityToPriority(severity: string): 'high' | 'medium' | 'low' {
+  const s = severity.toLowerCase()
+  if (s === 'warning' || s === 'critical' || s === 'high') return 'high'
+  if (s === 'info' || s === 'low') return 'low'
+  return 'medium'
+}
+
+function mapDashboardFromApi(live: AdminDashboardPayload) {
+  const recentActivity = (live.recentActivity ?? []).map((a) => ({
+    id: a.id,
+    type: mapApiActivityType(a.type),
+    customer: a.user,
+    car: a.vehicle ?? '—',
+    time: formatRelativeTime(a.timestamp),
+    status: (a.status ?? 'confirmed') as string,
+  }))
+
+  const alerts = (live.alerts ?? []).map((a) => ({
+    id: a.id,
+    type: a.type,
+    message: a.message,
+    priority: mapSeverityToPriority(a.severity),
+  }))
+
+  return { recentActivity, alerts }
+}
 
 const AdminDashboardPage: React.FC = () => {
   const [tunnelEvents, setTunnelEvents] = useState<TunnelEventSummary[]>([])
@@ -49,10 +99,10 @@ const AdminDashboardPage: React.FC = () => {
       maintenanceAlerts: 2
     },
     recentActivity: [
-      { id: 1, type: 'booking', customer: 'John Doe', car: 'Tesla Model 3', time: '10 minutes ago', status: 'confirmed' },
-      { id: 2, type: 'damage', customer: 'Jane Smith', car: 'BMW X5', time: '2 hours ago', status: 'pending' },
-      { id: 3, type: 'return', customer: 'Mike Johnson', car: 'Toyota Camry', time: '4 hours ago', status: 'completed' },
-      { id: 4, type: 'booking', customer: 'Sarah Wilson', car: 'Tesla Model 3', time: '6 hours ago', status: 'confirmed' },
+      { id: '1', type: 'booking', customer: 'John Doe', car: 'Tesla Model 3', time: '10 minutes ago', status: 'confirmed' },
+      { id: '2', type: 'damage', customer: 'Jane Smith', car: 'BMW X5', time: '2 hours ago', status: 'pending' },
+      { id: '3', type: 'return', customer: 'Mike Johnson', car: 'Toyota Camry', time: '4 hours ago', status: 'completed' },
+      { id: '4', type: 'booking', customer: 'Sarah Wilson', car: 'Tesla Model 3', time: '6 hours ago', status: 'confirmed' },
     ],
     upcomingReservations: [
       { id: 1, customer: 'Alice Brown', car: 'BMW X5', pickupDate: '2025-08-06', pickupTime: '10:00', status: 'confirmed' },
@@ -66,10 +116,10 @@ const AdminDashboardPage: React.FC = () => {
       { id: 4, make: 'Tesla', model: 'Model 3', status: 'available', location: 'Downtown', nextAvailable: 'Now' },
     ],
     alerts: [
-      { id: 1, type: 'maintenance', message: 'BMW X5 - Oil change due in 2 days', priority: 'medium' },
-      { id: 2, type: 'damage', message: 'Tesla Model 3 - New damage report pending review', priority: 'high' },
-      { id: 3, type: 'booking', message: '5 new reservations require identity verification', priority: 'medium' },
-    ]
+      { id: '1', type: 'maintenance', message: 'BMW X5 - Oil change due in 2 days', priority: 'medium' },
+      { id: '2', type: 'damage', message: 'Tesla Model 3 - New damage report pending review', priority: 'high' },
+      { id: '3', type: 'booking', message: '5 new reservations require identity verification', priority: 'medium' },
+    ] as Array<{ id: string; type: string; message: string; priority: 'high' | 'medium' | 'low' }>
   })
 
   useEffect(() => {
@@ -77,6 +127,7 @@ const AdminDashboardPage: React.FC = () => {
     ;(async () => {
       const live = await fetchAdminDashboard()
       if (cancelled || !live) return
+      const { recentActivity, alerts } = mapDashboardFromApi(live)
       setDashboardData((prev) => ({
         ...prev,
         metrics: {
@@ -85,6 +136,8 @@ const AdminDashboardPage: React.FC = () => {
           activeReservations: live.overview.activeBookings,
           availableVehicles: live.overview.availableVehicles,
         },
+        recentActivity,
+        alerts,
       }))
     })()
     return () => {

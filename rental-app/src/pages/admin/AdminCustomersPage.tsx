@@ -43,7 +43,7 @@ const AdminCustomersPage: React.FC = () => {
     let cancelled = false
     ;(async () => {
       const users = await fetchAdminUsers()
-      if (cancelled || !users?.length) return
+      if (cancelled || users === null) return
       setCustomers(users.map(mapApiUser))
       setDataSource('api')
     })()

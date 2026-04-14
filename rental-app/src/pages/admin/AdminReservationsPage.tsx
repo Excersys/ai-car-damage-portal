@@ -203,7 +203,7 @@ const AdminReservationsPage: React.FC = () => {
     let cancelled = false
     ;(async () => {
       const rows = await fetchAdminBookings()
-      if (cancelled || !rows?.length) return
+      if (cancelled || rows === null) return
       setReservations(rows.map(mapApiBooking))
     })()
     return () => {

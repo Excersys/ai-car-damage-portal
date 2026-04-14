@@ -29,14 +29,49 @@ export interface ApiCar {
   specs?: Record<string, string | number>
 }
 
-export async function fetchCars(): Promise<ApiCar[] | null> {
+export interface VehicleSearchParams {
+  location?: string
+  vehicleType?: string
+  minPrice?: number
+  maxPrice?: number
+  startDate?: string
+  endDate?: string
+  sortBy?: string
+  sortOrder?: string
+  page?: number
+  limit?: number
+}
+
+export async function fetchCars(params?: VehicleSearchParams): Promise<ApiCar[] | null> {
   if (!isApiConfigured()) return null
   try {
-    const res = await apiClient.get('/cars')
+    const searchParams = new URLSearchParams()
+    if (params) {
+      if (params.location && params.location !== 'all') searchParams.set('location', params.location)
+      if (params.vehicleType && params.vehicleType !== 'All Types') searchParams.set('vehicleType', params.vehicleType)
+      if (params.minPrice !== undefined) searchParams.set('minPrice', String(params.minPrice))
+      if (params.maxPrice !== undefined) searchParams.set('maxPrice', String(params.maxPrice))
+      if (params.startDate) searchParams.set('startDate', params.startDate)
+      if (params.endDate) searchParams.set('endDate', params.endDate)
+      if (params.sortBy) searchParams.set('sortBy', params.sortBy)
+      if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder)
+      if (params.page) searchParams.set('page', String(params.page))
+      if (params.limit) searchParams.set('limit', String(params.limit))
+    }
+    const query = searchParams.toString()
+    const url = query ? `/vehicles/search?${query}` : '/vehicles/search'
+    const res = await apiClient.get(url)
     const data = res.data
-    return Array.isArray(data) ? data : data?.cars ?? null
+    return Array.isArray(data) ? data : data?.vehicles ?? data?.cars ?? null
   } catch {
-    return null
+    // Fall back to legacy /cars endpoint
+    try {
+      const res = await apiClient.get('/cars')
+      const data = res.data
+      return Array.isArray(data) ? data : data?.cars ?? null
+    } catch {
+      return null
+    }
   }
 }
 

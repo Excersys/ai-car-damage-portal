@@ -86,6 +86,103 @@ GitHub Actions ([`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml)):
 - **main branch:** deploys to staging, then production (with automatic rollback on failure).
 - Camera-system CDK stacks are deployed alongside rental-app stacks in each environment.
 
+## Local development
+
+### Prerequisites
+
+- **Node.js 18+** and **npm** (for portal and rental-app)
+- **Python 3.11+** and **pip** (for camera-system)
+- **AWS CLI v2** configured with appropriate credentials (for deployment)
+- **AWS CDK** (`npm install -g aws-cdk`) for infrastructure changes
+
+### Portal frontend
+
+```bash
+cd portal/frontend
+cp .env.example .env.local    # then fill DATABASE_URL + AUTH_SECRET
+npm install
+npm run dev                    # http://localhost:3000
+npm run build                  # production build
+npm run lint                   # ESLint
+```
+
+Requires a PostgreSQL database (Supabase or local). Schema is in `portal/backend/db/`.
+
+### Rental app
+
+```bash
+cd rental-app
+cp .env.example .env           # optional — works without env vars (mock data)
+npm install
+npm run dev                    # http://localhost:5173
+npm run build                  # Vite production build
+npm run test                   # Jest tests
+npm run lint                   # ESLint
+npm run type-check             # TypeScript check
+```
+
+### Camera system
+
+```bash
+cd camera-system
+pip install -r pi/requirements.txt        # Pi capture deps
+pip install -r model/requirements.txt     # Model/inference deps
+pip install pytest                        # Test runner
+
+python -m pytest pi/tests/ -q             # Pi unit tests
+python -m pytest lambdas/review_api/ -q   # Review API tests
+python -m pytest lambdas/damage_detection/ -q  # Damage detection tests
+python -m pytest model/tests/ -q          # Model tests
+```
+
+## Secrets management
+
+| Secret | Where it lives | Notes |
+|--------|---------------|-------|
+| `DATABASE_URL` | Supabase dashboard / Vercel env vars | PostgreSQL connection string |
+| `AUTH_SECRET` | Vercel env vars | Generate with `openssl rand -base64 32` |
+| `TUNNEL_REVIEW_API_KEY` | AWS API Gateway console / `.env.local` | x-api-key for camera Review API |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | GitHub Actions secrets | For CI/CD deployments |
+| `VITE_API_BASE_URL` | Vercel env vars / `.env` | API Gateway endpoint per environment |
+| Cognito credentials | AWS Console > Cognito | User Pool ID + Client ID |
+
+**Never commit secrets.** All `.env*` files are gitignored. For CI/CD, secrets are stored in GitHub Actions secrets and AWS Secrets Manager.
+
+## Deployment
+
+### Portal (Vercel)
+
+1. Connect the repo to Vercel
+2. Set **Root Directory** to `portal/frontend`
+3. Add environment variables (`DATABASE_URL`, `AUTH_SECRET`, `TUNNEL_REVIEW_API_*`)
+4. Vercel auto-deploys on push to main
+
+### Rental app + Camera system (AWS)
+
+Deployments run via GitHub Actions CI/CD:
+
+| Branch | Environment | Approval |
+|--------|-------------|----------|
+| `develop` | dev | Automatic |
+| `main` | staging | Automatic |
+| `main` | production | Requires GitHub environment approval |
+
+**Manual deployment:**
+
+```bash
+# Rental app infrastructure
+cd rental-app/infrastructure
+cdk deploy --context environment=dev --require-approval never
+
+# Camera system infrastructure
+cd camera-system/infra
+npx aws-cdk@2 deploy --all --context environment=dev --require-approval never
+```
+
+### Rollback
+
+Production frontend rollback is automatic on CI failure. For manual rollback, the CI creates S3 backups with `backup-TIMESTAMP/` prefixes — sync the latest backup back to the root.
+
 ## Security
 
 - **Never commit** `.env`, `.env.local`, or real credentials.

@@ -14,6 +14,8 @@ import AdminInspectionStationPage from './pages/admin/AdminInspectionStationPage
 import AdminCustomersPage from './pages/admin/AdminCustomersPage'
 import AdminReportsPage from './pages/admin/AdminReportsPage'
 import DamageDetectionPage from './pages/DamageDetectionPage'
+import VehicleSearchPage from './pages/VehicleSearchPage'
+import VehicleDetailsPage from './pages/VehicleDetailsPage'
 import Header from './components/Header'
 import AdminHeader from './components/AdminHeader'
 import './App.css'
@@ -54,6 +56,8 @@ function App() {
                   <Route path="/booking-confirmation/:bookingId" element={<BookingConfirmationPage />} />
                   <Route path="/bookings" element={<BookingsPage />} />
                   <Route path="/damage-detection" element={<DamageDetectionPage />} />
+                  <Route path="/vehicles" element={<VehicleSearchPage />} />
+                  <Route path="/vehicles/:vehicleId" element={<VehicleDetailsPage />} />
                   <Route path="/login" element={<LoginPage />} />
                 </Routes>
               </main>

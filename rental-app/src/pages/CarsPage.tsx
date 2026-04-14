@@ -173,12 +173,17 @@ const CarsPage: React.FC = () => {
   })
 
   useEffect(() => {
-    fetchCars().then((apiCars) => {
+    fetchCars({
+      vehicleType: selectedCarType !== 'All Types' ? selectedCarType : undefined,
+      startDate: searchParams.get('pickupDate') || undefined,
+      endDate: searchParams.get('dropoffDate') || undefined,
+      location: searchParams.get('pickup') || undefined,
+    }).then((apiCars) => {
       if (apiCars && apiCars.length > 0) {
         setCars(apiCars.map(mapApiCar))
       }
     })
-  }, [])
+  }, [selectedCarType, searchParams])
 
   const filteredCars = useMemo(() => {
     return cars.filter(car => {

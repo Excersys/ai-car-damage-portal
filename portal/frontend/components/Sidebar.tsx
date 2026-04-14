@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Car, ShieldCheck, Users, Search, Settings } from "lucide-react";
+import { LayoutDashboard, Car, ShieldCheck, ClipboardList, Users, Search, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Fleet Registry", href: "/fleet", icon: Car },
   { name: "QC Station", href: "/qc", icon: ShieldCheck },
+  { name: "Inspections", href: "/inspections", icon: ClipboardList },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Search", href: "/search", icon: Search },
   { name: "Settings", href: "/settings", icon: Settings },

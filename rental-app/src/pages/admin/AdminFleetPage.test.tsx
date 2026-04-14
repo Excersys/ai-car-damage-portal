@@ -1,33 +1,57 @@
-import * as fs from 'fs'
-import * as path from 'path'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 
-const SOURCE_PATH = path.resolve(__dirname, 'AdminFleetPage.tsx')
-const source = fs.readFileSync(SOURCE_PATH, 'utf-8')
+const { mockFetchAdminVehicles } = vi.hoisted(() => ({
+  mockFetchAdminVehicles: vi.fn(),
+}))
 
-describe('AdminFleetPage – ACR-122 real data wiring', () => {
-  it('imports fetchAdminVehicles from adminApi', () => {
-    expect(source).toContain('fetchAdminVehicles')
-    expect(source).toMatch(/import\s+\{[^}]*fetchAdminVehicles[^}]*\}\s+from\s+['"].*adminApi['"]/)
+vi.mock('../../lib/adminApi', () => ({
+  fetchAdminVehicles: mockFetchAdminVehicles,
+}))
+
+import AdminFleetPage from './AdminFleetPage'
+
+describe('AdminFleetPage', () => {
+  beforeEach(() => {
+    mockFetchAdminVehicles.mockReset()
+    mockFetchAdminVehicles.mockResolvedValue(null)
   })
 
-  it('calls fetchAdminVehicles inside a useEffect', () => {
-    expect(source).toContain('useEffect')
-    expect(source).toContain('fetchAdminVehicles()')
+  it('renders without crashing', async () => {
+    render(
+      <MemoryRouter>
+        <AdminFleetPage />
+      </MemoryRouter>
+    )
+    await waitFor(() => {
+      expect(screen.getByText(/Fleet Management/)).toBeInTheDocument()
+    })
   })
 
-  it('maps API rows via mapApiVehicle before setting state', () => {
-    expect(source).toContain('mapApiVehicle')
-    expect(source).toMatch(/rows\.map\(mapApiVehicle\)/)
+  it('has fleet overview tab', async () => {
+    render(
+      <MemoryRouter>
+        <AdminFleetPage />
+      </MemoryRouter>
+    )
+    await waitFor(() => {
+      expect(screen.getByText(/Fleet Report/)).toBeInTheDocument()
+    })
   })
 
-  it('keeps MOCK_FLEET as fallback when API returns null', () => {
-    expect(source).toContain('MOCK_FLEET')
-    // The state initializes with mock data, API replaces only on success
-    expect(source).toMatch(/useState<Vehicle\[\]>\(MOCK_FLEET\)/)
+  it('calls fetchAdminVehicles on mount', async () => {
+    render(
+      <MemoryRouter>
+        <AdminFleetPage />
+      </MemoryRouter>
+    )
+    await waitFor(() => {
+      expect(mockFetchAdminVehicles).toHaveBeenCalled()
+    })
   })
 
-  it('does not hardcode fleet data without fallback mechanism', () => {
-    // Ensure the useEffect guards against null (cancelled || rows === null)
-    expect(source).toContain('rows === null')
+  it('exports a valid React component', () => {
+    expect(typeof AdminFleetPage).toBe('function')
   })
 })

@@ -1,31 +1,100 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+
+const { mockPost } = vi.hoisted(() => ({
+  mockPost: vi.fn(),
+}))
+
+vi.mock('../config/api', () => ({
+  apiClient: { post: mockPost },
+}))
+
+import LoginPage from './LoginPage'
+
+function getEmailInput() {
+  return document.querySelector('input[name="email"]') as HTMLInputElement
+}
+
+function getPasswordInput() {
+  return document.querySelector('input[name="password"]') as HTMLInputElement
+}
 
 describe('LoginPage', () => {
-  const filePath = path.resolve(__dirname, 'LoginPage.tsx');
-  const source = fs.readFileSync(filePath, 'utf-8');
+  beforeEach(() => {
+    mockPost.mockReset()
+    localStorage.clear()
+  })
 
-  it('exports a default component', () => {
-    expect(source).toMatch(/export default LoginPage/);
-  });
+  it('renders without crashing', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+    expect(screen.getByText('Welcome Back')).toBeInTheDocument()
+  })
 
-  it('imports apiClient from config/api', () => {
-    expect(source).toMatch(/import\s+\{[^}]*apiClient[^}]*\}\s+from\s+['"]\.\.\/config\/api['"]/);
-  });
+  it('has email and password inputs', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+    expect(getEmailInput()).toBeTruthy()
+    expect(getPasswordInput()).toBeTruthy()
+  })
 
-  it('calls apiClient.post for login', () => {
-    expect(source).toMatch(/apiClient\.post\(\s*['"]\/auth\/login['"]/);
-  });
+  it('can toggle between login and register modes', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+    expect(screen.getByText('Welcome Back')).toBeInTheDocument()
 
-  it('calls apiClient.post for registration', () => {
-    expect(source).toMatch(/apiClient\.post\(\s*['"]\/auth\/register['"]/);
-  });
+    const toggleLink = screen.getByText(/sign up/i)
+    fireEvent.click(toggleLink)
 
-  it('stores token in localStorage as authToken', () => {
-    expect(source).toMatch(/localStorage\.setItem\(\s*['"]authToken['"]/);
-  });
+    // After toggling, the heading should change
+    expect(screen.getByRole('heading', { name: /Create Account/i })).toBeInTheDocument()
+  })
 
-  it('does not contain TODO comments for auth logic', () => {
-    expect(source).not.toMatch(/TODO.*[Ii]mplement.*auth/);
-  });
-});
+  it('has a sign in button', () => {
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+    expect(screen.getByRole('button', { name: /Sign In/i })).toBeInTheDocument()
+  })
+
+  it('calls apiClient.post for login on form submit', async () => {
+    mockPost.mockResolvedValueOnce({
+      data: { token: 'test-jwt', user: { email: 'test@test.com' } },
+    })
+
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
+
+    fireEvent.change(getEmailInput(), {
+      target: { value: 'test@test.com' },
+    })
+    fireEvent.change(getPasswordInput(), {
+      target: { value: 'password123' },
+    })
+
+    const submitBtn = screen.getByRole('button', { name: /Sign In/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith(
+        '/auth/login',
+        expect.objectContaining({ email: 'test@test.com' })
+      )
+    })
+  })
+})

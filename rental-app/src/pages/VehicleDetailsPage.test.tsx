@@ -1,18 +1,35 @@
-export {}
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import VehicleDetailsPage from './VehicleDetailsPage'
 
-// We cannot import the component directly because it depends on modules that use import.meta.env.
-// Instead, we verify the module file exports a function (component) by checking the file system.
+// Mock axios which VehicleDetails uses directly
+vi.mock('axios', () => ({
+  default: {
+    get: vi.fn().mockRejectedValue(new Error('not configured')),
+    post: vi.fn(),
+    create: vi.fn(() => ({
+      get: vi.fn(),
+      post: vi.fn(),
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    })),
+  },
+}))
 
 describe('VehicleDetailsPage', () => {
-  it('module exports a default function component', () => {
-    const fs = require('fs')
-    const path = require('path')
-    const filePath = path.resolve(__dirname, 'VehicleDetailsPage.tsx')
-    expect(fs.existsSync(filePath)).toBe(true)
+  it('renders without crashing', () => {
+    render(
+      <MemoryRouter initialEntries={['/vehicles/1']}>
+        <Routes>
+          <Route path="/vehicles/:vehicleId" element={<VehicleDetailsPage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    // Page will be in a loading state or show the vehicle details component
+    expect(document.body.textContent).toBeTruthy()
+  })
 
-    // Read the file and verify it exports a default component
-    const content = fs.readFileSync(filePath, 'utf-8')
-    expect(content).toContain('export default VehicleDetailsPage')
-    expect(content).toContain('React.FC')
+  it('exports a valid React component', () => {
+    expect(typeof VehicleDetailsPage).toBe('function')
   })
 })

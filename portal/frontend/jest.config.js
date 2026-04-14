@@ -15,4 +15,10 @@ module.exports = {
       },
     ],
   },
+  collectCoverageFrom: [
+    "lib/**/*.{ts,tsx}",
+    "components/**/*.{ts,tsx}",
+    "app/**/*.{ts,tsx}",
+    "!**/*.d.ts",
+  ],
 };

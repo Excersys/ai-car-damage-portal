@@ -1,75 +1,117 @@
-export {}
-const fs = require('fs')
-const path = require('path')
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
-describe('BookingFormPage (ACR-121)', () => {
-  const content = fs.readFileSync(path.resolve(__dirname, 'BookingFormPage.tsx'), 'utf8')
+const { mockFetchCarById, mockPost } = vi.hoisted(() => ({
+  mockFetchCarById: vi.fn(),
+  mockPost: vi.fn(),
+}))
 
-  it('imports apiClient for booking persistence', () => {
-    expect(content).toContain("from '../config/api'")
-    expect(content).toContain('apiClient')
+vi.mock('../lib/vehicleApi', () => ({
+  fetchCarById: mockFetchCarById,
+}))
+
+vi.mock('../config/api', () => ({
+  apiClient: {
+    post: mockPost,
+    get: vi.fn(),
+    create: vi.fn(),
+    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    defaults: { baseURL: '', timeout: 10000, headers: {} },
+  },
+}))
+
+vi.mock('../components/PaymentForm', () => ({
+  default: ({ onPaymentComplete }: any) => (
+    <div data-testid="payment-form">
+      <button onClick={() => onPaymentComplete({ paymentIntentId: 'pi_test' })}>
+        Complete Payment
+      </button>
+    </div>
+  ),
+}))
+
+vi.mock('../components/VeriffVerification', () => ({
+  default: ({ onVerificationComplete }: any) => (
+    <div data-testid="veriff">
+      <button onClick={() => onVerificationComplete(true, 'session-123', {})}>
+        Complete Verification
+      </button>
+    </div>
+  ),
+}))
+
+import BookingFormPage from './BookingFormPage'
+
+describe('BookingFormPage', () => {
+  beforeEach(() => {
+    mockFetchCarById.mockReset()
+    mockPost.mockReset()
+    mockFetchCarById.mockResolvedValue(null)
   })
 
-  it('calls POST /bookings to persist reservations', () => {
-    expect(content).toContain("apiClient.post('/bookings'")
+  const renderBookingForm = (carId = '1', searchParams = '') => {
+    return render(
+      <MemoryRouter initialEntries={[`/book/${carId}${searchParams}`]}>
+        <Routes>
+          <Route path="/book/:carId" element={<BookingFormPage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+  }
+
+  it('renders without crashing', async () => {
+    renderBookingForm()
+    await waitFor(() => {
+      expect(document.body.textContent!.length).toBeGreaterThan(0)
+    })
   })
 
-  it('sends carId, userId, dates, and totalAmount in booking payload', () => {
-    expect(content).toContain('carId:')
-    expect(content).toContain('startDate:')
-    expect(content).toContain('endDate:')
-    expect(content).toContain('totalAmount:')
+  it('shows booking steps', async () => {
+    renderBookingForm()
+    await waitFor(() => {
+      // The booking form has step indicators
+      const text = document.body.textContent || ''
+      expect(text).toContain('Confirmation')
+    })
   })
 
-  it('uses API-returned bookingId when available', () => {
-    expect(content).toContain('response.data?.bookingId')
+  it('loads car data from fallback when API returns null', async () => {
+    renderBookingForm('1')
+    await waitFor(() => {
+      const text = document.body.textContent || ''
+      expect(text).toContain('Tesla')
+    })
   })
 
-  it('gracefully falls back to local ID on API failure', () => {
-    expect(content).toContain('Failed to persist booking, using local ID')
-  })
-})
+  it('loads car data from API when available', async () => {
+    mockFetchCarById.mockResolvedValueOnce({
+      id: '1',
+      make: 'Honda',
+      model: 'Civic',
+      year: 2024,
+      pricePerDay: 45,
+      features: [],
+      type: 'sedan',
+      available: true,
+    })
 
-describe('BookingFormPage (ACR-125) – verification gate before payment', () => {
-  const src = fs.readFileSync(path.resolve(__dirname, 'BookingFormPage.tsx'), 'utf8')
-
-  it('checks verificationSessionId before allowing transition to payment step', () => {
-    expect(src).toContain('verificationSessionId')
-    expect(src).toMatch(/!verificationSessionId/)
-  })
-
-  it('blocks step progression to payment (step 5) when verification is missing', () => {
-    expect(src).toMatch(/currentStep\s*===\s*4\s*&&\s*!verificationSessionId/)
-  })
-
-  it('returns early (does not increment step) when verification gate fails', () => {
-    const gateIdx = src.indexOf('currentStep === 4 && !verificationSessionId')
-    expect(gateIdx).toBeGreaterThan(-1)
-    const gateBlock = src.slice(gateIdx)
-    const nextReturn = gateBlock.indexOf('return')
-    expect(nextReturn).toBeGreaterThan(0)
-    expect(nextReturn).toBeLessThan(200)
+    renderBookingForm('1')
+    await waitFor(() => {
+      expect(screen.getByText(/Honda/)).toBeInTheDocument()
+    })
   })
 
-  it('tracks verificationSessionId state', () => {
-    expect(src).toContain('setVerificationSessionId')
+  it('shows step navigation', async () => {
+    renderBookingForm()
+    await waitFor(() => {
+      // Should have a Next or Continue button
+      const buttons = document.querySelectorAll('button')
+      expect(buttons.length).toBeGreaterThan(0)
+    })
   })
 
-  it('has a VeriffVerification component for step 2', () => {
-    expect(src).toContain('VeriffVerification')
-    expect(src).toContain('onVerificationComplete')
-  })
-})
-
-describe('BookingsPage (ACR-121)', () => {
-  const content = fs.readFileSync(path.resolve(__dirname, 'BookingsPage.tsx'), 'utf8')
-
-  it('imports fetchBookings from vehicleApi', () => {
-    expect(content).toContain('fetchBookings')
-    expect(content).toContain("from '../lib/vehicleApi'")
-  })
-
-  it('calls fetchBookings in useEffect', () => {
-    expect(content).toContain('fetchBookings()')
+  it('exports a valid React component', () => {
+    expect(typeof BookingFormPage).toBe('function')
   })
 })

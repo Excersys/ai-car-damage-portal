@@ -1,19 +1,37 @@
-export {}
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import VehicleSearchPage from './VehicleSearchPage'
 
-// We cannot import the component directly because it depends on modules that use import.meta.env.
-// Instead, we verify the module file exports a function (component) by checking the file system.
+// Mock axios which VehicleSearch uses directly
+vi.mock('axios', () => ({
+  default: {
+    get: vi.fn().mockRejectedValue(new Error('not configured')),
+    post: vi.fn(),
+    create: vi.fn(() => ({
+      get: vi.fn(),
+      post: vi.fn(),
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    })),
+  },
+}))
 
 describe('VehicleSearchPage', () => {
-  it('module exports a default function component', () => {
-    // Verify the module file exists and is importable by checking the file path resolves
-    const fs = require('fs')
-    const path = require('path')
-    const filePath = path.resolve(__dirname, 'VehicleSearchPage.tsx')
-    expect(fs.existsSync(filePath)).toBe(true)
+  it('renders without crashing', () => {
+    render(
+      <MemoryRouter>
+        <VehicleSearchPage />
+      </MemoryRouter>
+    )
+    expect(screen.getByText('Find Your Perfect Rental')).toBeInTheDocument()
+  })
 
-    // Read the file and verify it exports a default component
-    const content = fs.readFileSync(filePath, 'utf-8')
-    expect(content).toContain('export default VehicleSearchPage')
-    expect(content).toContain('React.FC')
+  it('renders the VehicleSearch component', () => {
+    render(
+      <MemoryRouter>
+        <VehicleSearchPage />
+      </MemoryRouter>
+    )
+    expect(screen.getByText(/Choose from our premium fleet/)).toBeInTheDocument()
   })
 })

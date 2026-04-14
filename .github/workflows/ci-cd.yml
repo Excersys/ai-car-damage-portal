@@ -43,6 +43,51 @@ jobs:
       # - name: Run type checking
       #   run: npm run type-check
 
+  test-camera-system:
+    name: Camera System Python Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: camera-system
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Pi test dependencies
+        run: |
+          pip install -r pi/requirements.txt
+          pip install pytest
+
+      - name: Run Pi unit tests
+        run: python -m pytest pi/tests/ -q
+        env:
+          PYTHONPATH: pi
+
+      - name: Run review_api tests
+        run: python -m pytest lambdas/review_api/ -q
+        env:
+          PYTHONPATH: lambdas/review_api
+
+      - name: Run damage_detection tests
+        run: python -m pytest lambdas/damage_detection/ -q
+        env:
+          PYTHONPATH: lambdas/damage_detection
+
+      - name: Install model test dependencies
+        run: |
+          pip install -r model/requirements.txt
+          pip install boto3
+
+      - name: Run model tests (detect_daemon, scan_uploader, plate_reader)
+        run: python -m pytest model/tests/ -q
+        env:
+          PYTHONPATH: model
+
   # REMOVED: build job - using intelligent caching instead of artifacts
   # Each deployment job now uses cache for maximum efficiency and zero artifact quota usage
   
@@ -52,7 +97,7 @@ jobs:
   deploy-dev:
     name: Deploy to Development
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [test, test-camera-system]
     if: github.ref == 'refs/heads/develop'
     environment: development
     defaults:
@@ -176,7 +221,7 @@ jobs:
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [test, test-camera-system]
     if: github.ref == 'refs/heads/main'
     environment: staging
     defaults:

@@ -113,18 +113,27 @@ def _invoke_model(image_bytes: bytes) -> dict | None:
         return None
 
 
+def _camera_frame_key(camera_id: str, frame_stem: str) -> str:
+    """DynamoDB sort key: unique per camera + frame (multi-frame bursts)."""
+    return f"{camera_id}#{frame_stem}"
+
+
 def _store_result(parsed: dict, image_path: str, prediction: dict) -> None:
     """Write the structured detection result to DynamoDB."""
     confidence = prediction.get("confidence", 0)
     damage_detected = confidence >= CONFIDENCE_THRESHOLD
+    cam = parsed["camera_id"]
+    frame_stem = parsed.get("frame", "frame_0000")
+    camera_frame = _camera_frame_key(cam, frame_stem)
 
     item = {
         "event_id": parsed["event_id"],
-        "camera_id": parsed["camera_id"],
+        "camera_frame": camera_frame,
+        "camera_id": cam,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "image_path": image_path,
         "license_plate": parsed.get("license_plate", ""),
-        "frame": parsed.get("frame", ""),
+        "frame": frame_stem,
         "damage_detected": damage_detected,
         "damage_type": prediction.get("damage_type", "unknown"),
         "confidence_score": str(confidence),
@@ -136,8 +145,8 @@ def _store_result(parsed: dict, image_path: str, prediction: dict) -> None:
         table.put_item(Item=item)
         logger.info(
             "Stored: %s/%s frame=%s damage=%s conf=%s plate=%s",
-            parsed["event_id"], parsed["camera_id"],
-            parsed["frame"], damage_detected,
+            parsed["event_id"], camera_frame,
+            frame_stem, damage_detected,
             item["confidence_score"], parsed.get("license_plate"),
         )
     except Exception:

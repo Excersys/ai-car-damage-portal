@@ -4,7 +4,7 @@ All capture, upload, and queue operations are mocked.
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,14 +14,23 @@ from s3_uploader import S3Result
 
 
 @pytest.fixture
-def client():
-    with patch("trigger_server.worker") as mock_worker:
-        mock_worker.start = MagicMock()
-        mock_worker.stop = MagicMock()
-        from trigger_server import app
+def client(tmp_path):
+    db_path = str(tmp_path / "queue.db")
+    with patch.dict("os.environ", {"UPLOAD_QUEUE_DB": db_path}):
+        import importlib
+        import config as _cfg
+        importlib.reload(_cfg)
+        import upload_queue as _uq
+        importlib.reload(_uq)
+        import trigger_server as _ts
+        importlib.reload(_ts)
 
-        with TestClient(app) as c:
-            yield c
+        with patch.object(_ts, "worker") as mock_worker:
+            mock_worker.start = AsyncMock()
+            mock_worker.stop = AsyncMock()
+
+            with TestClient(_ts.app) as c:
+                yield c
 
 
 class TestTriggerEndpoint:
@@ -121,6 +130,8 @@ class TestHealthEndpoint:
         assert body["status"] == "ok"
         assert body["cameras_discovered"] == 2
         assert body["s3_connectivity"] is True
+        assert body["queue_max_pending"] == 5000
+        assert body["queue_at_capacity"] is False
 
 
 class TestCamerasEndpoint:
@@ -153,3 +164,5 @@ class TestQueueStatusEndpoint:
         body = resp.json()
         assert body["pending"] == 3
         assert body["total"] == 14
+        assert body["max_pending"] == 5000
+        assert body["at_capacity"] is False

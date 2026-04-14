@@ -88,6 +88,17 @@ class UploadQueue:
 
     def enqueue(self, event_id: str, camera_id: str, local_path: str, s3_key: str) -> str:
         """Add one failed upload to the queue. Returns the queue item id."""
+        pending = self.stats().pending
+        if pending >= config.MAX_UPLOAD_QUEUE_PENDING:
+            logger.error(
+                "Upload queue full (%d pending >= max %d); dropping enqueue for %s/%s",
+                pending,
+                config.MAX_UPLOAD_QUEUE_PENDING,
+                event_id,
+                camera_id,
+            )
+            return ""
+
         item_id = uuid.uuid4().hex[:16]
         now = datetime.now(timezone.utc).isoformat()
         with self._conn() as conn:
@@ -110,8 +121,9 @@ class UploadQueue:
         count = 0
         for r in s3_results:
             if not r.success:
-                self.enqueue(event_id, r.camera_id, str(r.local_path), r.s3_key)
-                count += 1
+                qid = self.enqueue(event_id, r.camera_id, str(r.local_path), r.s3_key)
+                if qid:
+                    count += 1
         return count
 
     def dequeue_batch(self, batch_size: int = 10) -> list[QueueItem]:

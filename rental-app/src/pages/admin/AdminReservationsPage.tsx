@@ -193,7 +193,7 @@ const AdminReservationsPage: React.FC = () => {
     return mockReservations.filter(reservation => reservation.status === activeTab)
   }
 
-  const handleStatusChange = (reservationId: string, newStatus: string) => {
+  const handleStatusChange = (_reservationId: string, newStatus: string) => {
     // In real app, this would make API call
     // Update reservation status
     alert(`Reservation status updated to: ${newStatus}`)

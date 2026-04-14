@@ -34,7 +34,7 @@ class ApiStack(cdk.Stack):
             handler="handler.lambda_handler",
             code=_lambda.Code.from_asset("../lambdas/review_api"),
             memory_size=256,
-            timeout=cdk.Duration.seconds(15),
+            timeout=cdk.Duration.seconds(30),
             environment={
                 "DYNAMODB_TABLE": events_table.table_name,
                 "S3_BUCKET": image_bucket.bucket_name,
@@ -51,6 +51,15 @@ class ApiStack(cdk.Stack):
             rest_api_name="TunnelDamageDetectionAPI",
             description="API for reviewing tunnel car damage detection results",
             deploy_options=apigw.StageOptions(stage_name="v1"),
+            default_cors_preflight_options=apigw.CorsOptions(
+                allow_origins=apigw.Cors.ALL_ORIGINS,
+                allow_methods=["GET", "OPTIONS"],
+                allow_headers=[
+                    "Content-Type",
+                    "X-Api-Key",
+                    "Authorization",
+                ],
+            ),
         )
 
         api_key = api.add_api_key("TunnelApiKey", api_key_name="tunnel-api-key")
@@ -66,6 +75,12 @@ class ApiStack(cdk.Stack):
         tunnel = api.root.add_resource("tunnel")
         events = tunnel.add_resource("events")
         event_by_id = events.add_resource("{event_id}")
+
+        events.add_method(
+            "GET",
+            apigw.LambdaIntegration(self.review_fn),
+            api_key_required=True,
+        )
 
         event_by_id.add_method(
             "GET",

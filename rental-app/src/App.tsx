@@ -1,4 +1,3 @@
-import React from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import CarsPage from './pages/CarsPage'
@@ -12,6 +11,9 @@ import AdminReservationsPage from './pages/admin/AdminReservationsPage'
 import AdminDamageDetectionPage from './pages/admin/AdminDamageDetectionPage'
 import AdminFleetPage from './pages/admin/AdminFleetPage'
 import AdminInspectionStationPage from './pages/admin/AdminInspectionStationPage'
+import AdminCustomersPage from './pages/admin/AdminCustomersPage'
+import AdminReportsPage from './pages/admin/AdminReportsPage'
+import DamageDetectionPage from './pages/DamageDetectionPage'
 import Header from './components/Header'
 import AdminHeader from './components/AdminHeader'
 import './App.css'
@@ -32,6 +34,8 @@ function App() {
                   <Route path="/damage-detection" element={<AdminDamageDetectionPage />} />
                   <Route path="/fleet" element={<AdminFleetPage />} />
                   <Route path="/inspection-stations" element={<AdminInspectionStationPage />} />
+                  <Route path="/customers" element={<AdminCustomersPage />} />
+                  <Route path="/reports" element={<AdminReportsPage />} />
                 </Routes>
               </main>
             </div>
@@ -49,6 +53,7 @@ function App() {
                   <Route path="/book/:carId" element={<BookingFormPage />} />
                   <Route path="/booking-confirmation/:bookingId" element={<BookingConfirmationPage />} />
                   <Route path="/bookings" element={<BookingsPage />} />
+                  <Route path="/damage-detection" element={<DamageDetectionPage />} />
                   <Route path="/login" element={<LoginPage />} />
                 </Routes>
               </main>

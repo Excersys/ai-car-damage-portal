@@ -37,6 +37,13 @@ UPLOAD_WORKER_INTERVAL_S: float = float(
 UPLOAD_WORKER_BACKOFF_MAX_S: float = float(
     os.environ.get("UPLOAD_WORKER_BACKOFF_MAX_S", "300.0")
 )
+# Refuse new enqueue when pending rows exceed this (protects SD card / memory).
+MAX_UPLOAD_QUEUE_PENDING: int = int(os.environ.get("MAX_UPLOAD_QUEUE_PENDING", "5000"))
+
+# When True, discover USB V4L2 and CSI cameras even if RTSP cameras are configured.
+INCLUDE_USB_CAMERAS: bool = os.environ.get(
+    "INCLUDE_USB_CAMERAS", ""
+).strip().lower() in ("1", "true", "yes")
 
 SERVER_HOST: str = os.environ.get("SERVER_HOST", "0.0.0.0")
 SERVER_PORT: int = int(os.environ.get("SERVER_PORT", "8000"))

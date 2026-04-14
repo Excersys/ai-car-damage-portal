@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import {
+  isPiHealthConfigured,
+  fetchPiHealth,
+  fetchPiQueueStatus,
+  type PiHealthResponse,
+  type PiQueueStatus,
+} from '../../lib/piHealthApi'
 
 interface InspectionStation {
   id: string
@@ -22,39 +29,6 @@ interface InspectionStation {
   }
 }
 
-interface InspectionResult {
-  id: string
-  reservationId: string
-  stationId: string
-  type: 'pickup' | 'return'
-  timestamp: string
-  images: {
-    front: string
-    rear: string
-    leftSide: string
-    rightSide: string
-    interior: string
-  }
-  aiAnalysis?: {
-    overallCondition: string
-    damageDetected: Array<{
-      type: string
-      location: string
-      severity: string
-      confidence: number
-    }>
-    comparisonWithPrevious?: {
-      newDamage: Array<{
-        type: string
-        location: string
-        severity: string
-        estimatedCost: number
-      }>
-      totalNewDamageCost: number
-    }
-  }
-}
-
 const AdminInspectionStationPage: React.FC = () => {
   const [stations, setStations] = useState<InspectionStation[]>([])
   const [selectedStation, setSelectedStation] = useState<InspectionStation | null>(null)
@@ -66,6 +40,30 @@ const AdminInspectionStationPage: React.FC = () => {
   const [capturedImages, setCapturedImages] = useState<Record<string, string>>({})
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // ── Pi edge health (live from trigger_server) ───────────────────
+  const [piHealth, setPiHealth] = useState<PiHealthResponse | null>(null)
+  const [piQueue, setPiQueue] = useState<PiQueueStatus | null>(null)
+  const [piError, setPiError] = useState('')
+
+  const loadPiStatus = useCallback(async () => {
+    if (!isPiHealthConfigured()) return
+    try {
+      const [h, q] = await Promise.all([fetchPiHealth(), fetchPiQueueStatus()])
+      setPiHealth(h)
+      setPiQueue(q)
+      setPiError('')
+    } catch (err: unknown) {
+      setPiError(err instanceof Error ? err.message : 'Pi unreachable')
+    }
+  }, [])
+
+  useEffect(() => {
+    loadPiStatus()
+    if (!isPiHealthConfigured()) return
+    const id = setInterval(loadPiStatus, 15_000)
+    return () => clearInterval(id)
+  }, [loadPiStatus])
 
   // Mock inspection stations data
   const mockStations: InspectionStation[] = [
@@ -475,6 +473,52 @@ const AdminInspectionStationPage: React.FC = () => {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Pi Edge Health */}
+        {isPiHealthConfigured() && (
+          <div className="dashboard-section full-width" style={{marginTop:24}}>
+            <div className="section-header">
+              <h2>Pi Edge Status</h2>
+              <button className="btn-small btn-outline" onClick={loadPiStatus}>Refresh</button>
+            </div>
+
+            {piError && <p style={{color:'#f44336',margin:'8px 0'}}>{piError}</p>}
+
+            {piHealth && (
+              <div className="metrics-grid" style={{marginTop:8}}>
+                <div className="metric-card" style={{borderLeft:`4px solid ${piHealth.s3_connectivity ? '#4caf50' : '#f44336'}`}}>
+                  <div className="metric-content">
+                    <h3>{piHealth.s3_connectivity ? 'Online' : 'Offline'}</h3>
+                    <p>S3 Connectivity</p>
+                  </div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-content">
+                    <h3>{piHealth.cameras_discovered}</h3>
+                    <p>Cameras Discovered</p>
+                  </div>
+                </div>
+                <div className="metric-card" style={{borderLeft:`4px solid ${piHealth.queue_at_capacity ? '#f44336' : '#4caf50'}`}}>
+                  <div className="metric-content">
+                    <h3>{piHealth.queue_pending} / {piHealth.queue_max_pending}</h3>
+                    <p>Upload Queue</p>
+                    {piHealth.queue_at_capacity && <span style={{color:'#f44336',fontSize:12,fontWeight:600}}>AT CAPACITY</span>}
+                  </div>
+                </div>
+                {piQueue && (
+                  <div className="metric-card">
+                    <div className="metric-content">
+                      <h3>{piQueue.uploaded}</h3>
+                      <p>Uploaded ({piQueue.failed} failed)</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!piHealth && !piError && <p style={{color:'#888',margin:'8px 0'}}>Loading Pi health...</p>}
           </div>
         )}
 

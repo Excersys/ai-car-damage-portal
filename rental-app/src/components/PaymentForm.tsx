@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import {
   Elements,
-  CardElement,
   PaymentElement,
   useStripe,
   useElements
 } from '@stripe/react-stripe-js';
-import { apiClient, createApiUrl } from '../config/api';
+import { apiClient } from '../config/api';
 
 interface PaymentFormProps {
   bookingData: any;
@@ -164,7 +163,8 @@ const PaymentFormContent: React.FC<PaymentFormProps & { paymentIntentData: Payme
             status: paymentIntent.status,
             amount: paymentIntent.amount,
             currency: paymentIntent.currency,
-            receipt_url: paymentIntent.charges?.data[0]?.receipt_url,
+            receipt_url: (paymentIntent as { charges?: { data: Array<{ receipt_url?: string }> } })
+              .charges?.data[0]?.receipt_url,
             booking: completionResult,
             timestamp: new Date().toISOString()
           });

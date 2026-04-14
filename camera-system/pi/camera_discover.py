@@ -123,16 +123,19 @@ def discover_all() -> list[CameraInfo]:
     """
     Return all discovered cameras.
 
-    Priority: RTSP (network) first, then USB, then CSI.
-    When RTSP cameras are configured they are the primary source; USB/CSI
-    are still included so mixed setups work out of the box.
+    Priority: RTSP (network) first. When ``CAMERAS_JSON`` defines at least one
+    RTSP camera, USB and CSI discovery are skipped by default so the Pi does
+    not enumerate dozens of internal ``/dev/video*`` nodes. Set
+    ``INCLUDE_USB_CAMERAS=true`` to also include USB/CSI (mixed setups).
     """
     cameras: list[CameraInfo] = []
-    cameras.extend(discover_rtsp_cameras())
-    cameras.extend(discover_v4l2_cameras())
-    csi = discover_csi_camera()
-    if csi:
-        cameras.append(csi)
+    rtsp = discover_rtsp_cameras()
+    cameras.extend(rtsp)
+    if not rtsp or config.INCLUDE_USB_CAMERAS:
+        cameras.extend(discover_v4l2_cameras())
+        csi = discover_csi_camera()
+        if csi:
+            cameras.append(csi)
     return cameras
 
 

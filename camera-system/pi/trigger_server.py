@@ -58,6 +58,7 @@ class TriggerPayload(BaseModel):
     timestamp: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+    plate: str = "unknown"
 
 
 class CameraResultItem(BaseModel):
@@ -84,6 +85,8 @@ class HealthResponse(BaseModel):
     cameras_discovered: int
     s3_connectivity: bool
     queue_pending: int
+    queue_max_pending: int
+    queue_at_capacity: bool
 
 
 class QueueStatusResponse(BaseModel):
@@ -92,6 +95,29 @@ class QueueStatusResponse(BaseModel):
     uploaded: int
     failed: int
     total: int
+    max_pending: int
+    at_capacity: bool
+
+
+class ScanUploadItem(BaseModel):
+    """A single file to upload from a daemon burst scan."""
+    local_path: str
+    camera_id: str
+    frame_index: int = 0
+
+
+class ScanUploadPayload(BaseModel):
+    """Payload sent by detect_daemon after a burst capture."""
+    event_id: str
+    plate: str = "unknown"
+    files: list[ScanUploadItem]
+
+
+class ScanUploadResponse(BaseModel):
+    event_id: str
+    uploaded: int
+    queued: int
+    failed: int
 
 
 class CameraItem(BaseModel):
@@ -122,7 +148,7 @@ async def trigger(payload: TriggerPayload):
     captures: list[CaptureResult] = capture_all(event_id)
     captured_count = sum(1 for c in captures if c.success)
 
-    s3_results = upload_event(event_id, captures)
+    s3_results = upload_event(event_id, captures, plate=payload.plate)
     uploaded_ids = {r.camera_id for r in s3_results if r.success}
     failed_results = [r for r in s3_results if not r.success]
 
@@ -168,6 +194,43 @@ async def trigger(payload: TriggerPayload):
     )
 
 
+@app.post("/scan/upload", response_model=ScanUploadResponse)
+async def scan_upload(payload: ScanUploadPayload):
+    """Accept pre-captured burst frames from detect_daemon and upload via the queue."""
+    from pathlib import Path as _Path
+
+    class _FakeCapture:
+        def __init__(self, camera_id: str, local_path: str):
+            self.camera_id = camera_id
+            self.local_path = _Path(local_path)
+            self.success = self.local_path.exists()
+
+    captures = [
+        _FakeCapture(f.camera_id, f.local_path)
+        for f in payload.files
+    ]
+
+    s3_results = upload_event(payload.event_id, captures, plate=payload.plate)
+    uploaded_ids = {r.camera_id for r in s3_results if r.success}
+    failed_results = [r for r in s3_results if not r.success]
+
+    queued_count = 0
+    if failed_results:
+        queued_count = queue.enqueue_failures(payload.event_id, failed_results)
+
+    logger.info(
+        "Scan upload %s: uploaded=%d queued=%d failed=%d",
+        payload.event_id, len(uploaded_ids), queued_count,
+        len(failed_results) - queued_count,
+    )
+    return ScanUploadResponse(
+        event_id=payload.event_id,
+        uploaded=len(uploaded_ids),
+        queued=queued_count,
+        failed=len(failed_results) - queued_count,
+    )
+
+
 @app.post("/trigger/manual", response_model=TriggerResponse)
 async def trigger_manual():
     """Manual trigger for testing -- no payload needed."""
@@ -181,11 +244,15 @@ async def health():
     cameras = discover_all()
     online = check_connectivity()
     stats = queue.stats()
+    cap = config.MAX_UPLOAD_QUEUE_PENDING
+    at_cap = stats.pending >= cap
     return HealthResponse(
         status="ok",
         cameras_discovered=len(cameras),
         s3_connectivity=online,
         queue_pending=stats.pending,
+        queue_max_pending=cap,
+        queue_at_capacity=at_cap,
     )
 
 
@@ -202,12 +269,15 @@ async def list_cameras():
 async def queue_status():
     """Offline upload queue statistics."""
     s = queue.stats()
+    cap = config.MAX_UPLOAD_QUEUE_PENDING
     return QueueStatusResponse(
         pending=s.pending,
         uploading=s.uploading,
         uploaded=s.uploaded,
         failed=s.failed,
         total=s.total,
+        max_pending=cap,
+        at_capacity=s.pending >= cap,
     )
 
 

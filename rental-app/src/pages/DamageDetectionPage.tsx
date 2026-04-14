@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react'
 
 const DamageDetectionPage: React.FC = () => {
   const [selectedImages, setSelectedImages] = useState<File[]>([])
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [, setIsAnalyzing] = useState(false)
   const [analysisResults, setAnalysisResults] = useState<any>(null)
   const [currentStep, setCurrentStep] = useState<'upload' | 'analyzing' | 'results'>('upload')
   const fileInputRef = useRef<HTMLInputElement>(null)

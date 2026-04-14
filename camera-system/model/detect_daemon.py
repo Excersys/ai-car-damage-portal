@@ -349,8 +349,48 @@ def _try_read_plate(scan: ScanEvent) -> None:
         logger.exception("Plate reader failed")
 
 
+TRIGGER_SERVER_URL: str = os.environ.get(
+    "TRIGGER_SERVER_URL", "http://localhost:8000"
+)
+
+
 def _try_upload_to_s3(scan: ScanEvent) -> None:
-    """Upload burst images to S3 if configured."""
+    """Upload burst images via the trigger server's /scan/upload endpoint.
+
+    Falls back to the legacy scan_uploader if the trigger server is unreachable.
+    """
+    payload = {
+        "event_id": scan.event_id,
+        "plate": scan.license_plate or "unknown",
+        "files": [
+            {
+                "local_path": str(f.path),
+                "camera_id": f.camera_id,
+                "frame_index": f.frame_index,
+            }
+            for f in scan.frames
+            if Path(str(f.path)).exists()
+        ],
+    }
+    try:
+        import urllib.request
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(
+            f"{TRIGGER_SERVER_URL}/scan/upload",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            logger.info(
+                "Trigger server upload: %d — %s", resp.status, resp.read().decode()
+            )
+            return
+    except Exception:
+        logger.warning(
+            "Trigger server unreachable, falling back to direct S3 upload"
+        )
+
     try:
         from scan_uploader import upload_scan
         upload_scan(scan)

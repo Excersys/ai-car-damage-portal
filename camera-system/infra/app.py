@@ -7,7 +7,6 @@ Deploys all stacks for the Tunnel Damage Detection system.
 import aws_cdk as cdk
 
 from stacks.storage_stack import StorageStack
-from stacks.inference_stack import InferenceStack
 from stacks.api_stack import ApiStack
 from stacks.monitoring_stack import MonitoringStack
 
@@ -20,14 +19,6 @@ env = cdk.Environment(
 
 storage = StorageStack(app, "TunnelStorage", env=env)
 
-inference = InferenceStack(
-    app,
-    "TunnelInference",
-    image_bucket=storage.image_bucket,
-    events_table=storage.events_table,
-    env=env,
-)
-
 api = ApiStack(
     app,
     "TunnelApi",
@@ -39,7 +30,7 @@ api = ApiStack(
 MonitoringStack(
     app,
     "TunnelMonitoring",
-    inference_lambda=inference.damage_detection_fn,
+    inference_lambda=storage.damage_detection_fn,
     review_lambda=api.review_fn,
     env=env,
 )

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { Link, useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 
 // Import car images
 import teslaModel3 from '../images/SFAR.rendition.vlarge.png'

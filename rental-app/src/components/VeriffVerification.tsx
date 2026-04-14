@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState } from 'react';
 
 interface VeriffVerificationProps {
   onVerificationComplete: (success: boolean, sessionId?: string, verificationData?: any) => void;
@@ -58,9 +57,9 @@ interface VerificationReport {
 const VeriffVerification: React.FC<VeriffVerificationProps> = ({
   onVerificationComplete,
   onCancel,
-  userEmail,
-  carId,
-  bookingData
+  userEmail: _userEmail,
+  carId: _carId,
+  bookingData: _bookingData
 }) => {
   const [session, setSession] = useState<VerificationSession | null>(null);
   const [loading, setLoading] = useState(false);

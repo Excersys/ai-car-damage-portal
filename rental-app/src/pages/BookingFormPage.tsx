@@ -44,13 +44,13 @@ const BookingFormPage: React.FC = () => {
   // Get car details and selected options from navigation state or defaults
   const stateData = location.state
   const [car, setCar] = useState<Car | null>(stateData?.car || null)
-  const [selectedOptions, setSelectedOptions] = useState<SelectedOption[]>(stateData?.selectedOptions || [])
+  const [selectedOptions] = useState<SelectedOption[]>(stateData?.selectedOptions || [])
   const [currentStep, setCurrentStep] = useState(1)
   
   // Verification state
   const [verificationCompleted, setVerificationCompleted] = useState(false)
-  const [verificationSessionId, setVerificationSessionId] = useState<string>('')
-  const [verificationData, setVerificationData] = useState<any>(null)
+  const [, setVerificationSessionId] = useState<string>('')
+  const [, setVerificationData] = useState<any>(null)
   
   // Booking details from URL params or state
   const [bookingDetails, setBookingDetails] = useState({
@@ -274,19 +274,41 @@ const BookingFormPage: React.FC = () => {
     }
   }
 
-  const handleCompleteBooking = (paymentData: any) => {
-    const bookingId = 'BK' + Date.now()
-    navigate(`/booking-confirmation/${bookingId}`, {
+  const handleCompleteBooking = (_paymentData: any) => {
+    const id = 'BK' + Date.now()
+    const days = calculateDays()
+    const basePrice = car ? car.price * days : 0
+    const insurance = insuranceOptions.find(opt => opt.id === selectedInsurance)
+    const insurancePrice = insurance ? insurance.price * days : 0
+    const addOnsPrice = additionalOptions.reduce((total, optionId) => {
+      const opt = rentalOptions.find(o => o.id === optionId)
+      return total + (opt ? opt.price * days : 0)
+    }, 0)
+    const taxes = Math.round((basePrice + insurancePrice + addOnsPrice) * 0.085 * 100) / 100
+
+    navigate(`/booking-confirmation/${id}`, {
       state: {
-        bookingId,
+        bookingId: id,
         car,
-        bookingDetails,
-        userInfo,
-        selectedInsurance,
-        additionalOptions,
-        selectedOptions,
-        totalPrice: calculateTotalPrice(),
-        paymentData
+        booking: {
+          pickupDate: bookingDetails.pickupDate,
+          returnDate: bookingDetails.dropoffDate,
+          pickupTime: bookingDetails.pickupTime,
+          returnTime: bookingDetails.dropoffTime,
+          driverAge: 25,
+          pickupLocation: bookingDetails.pickupLocation,
+          returnLocation: bookingDetails.dropoffLocation,
+          insuranceType: selectedInsurance,
+          addOns: additionalOptions,
+        },
+        pricing: {
+          basePrice,
+          insurancePrice,
+          addOnsPrice,
+          taxes,
+          total: basePrice + insurancePrice + addOnsPrice + taxes,
+        },
+        totalDays: days,
       }
     })
   }
@@ -430,10 +452,9 @@ const BookingFormPage: React.FC = () => {
                   userEmail={userInfo.email || 'user@example.com'}
                   carId={carId || '1'}
                   bookingData={{
+                    ...bookingDetails,
                     car,
-                    pickupDate: bookingDetails.pickupDate,
                     returnDate: bookingDetails.dropoffDate,
-                    ...bookingDetails
                   }}
                 />
               </div>

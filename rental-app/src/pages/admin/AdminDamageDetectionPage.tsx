@@ -1,4 +1,11 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import {
+  isTunnelReviewConfigured,
+  fetchTunnelEvents,
+  fetchTunnelEventDetail,
+  type TunnelEventSummary,
+  type TunnelEventDetailResponse,
+} from '../../lib/tunnelReviewApi'
 
 interface DamageReport {
   id: string
@@ -25,15 +32,56 @@ interface DamageReport {
 }
 
 const AdminDamageDetectionPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'new-inspection' | 'pending-reports' | 'history'>('new-inspection')
+  const [activeTab, setActiveTab] = useState<'tunnel-scans' | 'new-inspection' | 'pending-reports' | 'history'>(
+    isTunnelReviewConfigured() ? 'tunnel-scans' : 'new-inspection',
+  )
   const [selectedImages, setSelectedImages] = useState<File[]>([])
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [, setIsAnalyzing] = useState(false)
   const [analysisResults, setAnalysisResults] = useState<any>(null)
   const [currentStep, setCurrentStep] = useState<'upload' | 'analyzing' | 'results'>('upload')
   const [selectedVehicle, setSelectedVehicle] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState('')
   const [inspectionType, setInspectionType] = useState<'pre-rental' | 'post-rental' | 'incident'>('pre-rental')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // ── Tunnel scans (live Review API) ──────────────────────────────
+  const [tunnelEvents, setTunnelEvents] = useState<TunnelEventSummary[]>([])
+  const [tunnelLoading, setTunnelLoading] = useState(false)
+  const [tunnelError, setTunnelError] = useState('')
+  const [tunnelDetail, setTunnelDetail] = useState<TunnelEventDetailResponse | null>(null)
+  const [tunnelDetailLoading, setTunnelDetailLoading] = useState(false)
+
+  const loadTunnelEvents = useCallback(async () => {
+    setTunnelLoading(true)
+    setTunnelError('')
+    try {
+      const data = await fetchTunnelEvents()
+      setTunnelEvents(data.events)
+    } catch (err: unknown) {
+      setTunnelError(err instanceof Error ? err.message : 'Failed to load tunnel events')
+    } finally {
+      setTunnelLoading(false)
+    }
+  }, [])
+
+  const loadTunnelDetail = useCallback(async (eventId: string) => {
+    setTunnelDetailLoading(true)
+    setTunnelDetail(null)
+    try {
+      const data = await fetchTunnelEventDetail(eventId)
+      setTunnelDetail(data)
+    } catch (err: unknown) {
+      setTunnelError(err instanceof Error ? err.message : 'Failed to load event detail')
+    } finally {
+      setTunnelDetailLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'tunnel-scans' && isTunnelReviewConfigured()) {
+      loadTunnelEvents()
+    }
+  }, [activeTab, loadTunnelEvents])
 
   // Mock data
   const mockReports: DamageReport[] = [
@@ -191,11 +239,19 @@ const AdminDamageDetectionPage: React.FC = () => {
 
         {/* Navigation Tabs */}
         <div className="damage-tabs">
+          {isTunnelReviewConfigured() && (
+            <button
+              className={`tab ${activeTab === 'tunnel-scans' ? 'active' : ''}`}
+              onClick={() => setActiveTab('tunnel-scans')}
+            >
+              Tunnel Scans
+            </button>
+          )}
           <button 
             className={`tab ${activeTab === 'new-inspection' ? 'active' : ''}`}
             onClick={() => setActiveTab('new-inspection')}
           >
-            🔍 New Inspection
+            New Inspection
           </button>
           <button 
             className={`tab ${activeTab === 'pending-reports' ? 'active' : ''}`}
@@ -210,6 +266,87 @@ const AdminDamageDetectionPage: React.FC = () => {
             📋 Inspection History
           </button>
         </div>
+
+        {/* Tunnel Scans Tab */}
+        {activeTab === 'tunnel-scans' && (
+          <div className="tunnel-scans-section">
+            {tunnelError && <p className="error-text" style={{color:'#f44336',marginBottom:12}}>{tunnelError}</p>}
+
+            {tunnelDetail ? (
+              <div className="tunnel-detail">
+                <button className="btn btn-secondary" style={{marginBottom:16}} onClick={() => setTunnelDetail(null)}>
+                  Back to list
+                </button>
+                <h2>Event {tunnelDetail.event_id}</h2>
+                <p>{tunnelDetail.total_cameras} camera(s) &middot; {tunnelDetail.any_damage ? 'Damage detected' : 'No damage'}</p>
+
+                <div className="tunnel-cameras-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:16,marginTop:16}}>
+                  {tunnelDetail.cameras.map((cam) => (
+                    <div key={cam.camera_frame} className="report-card" style={{padding:16}}>
+                      {cam.image_url && (
+                        <img src={cam.image_url} alt={cam.camera_id} style={{width:'100%',borderRadius:8,marginBottom:8}} />
+                      )}
+                      <h4>{cam.camera_id} / {cam.frame}</h4>
+                      <p style={{margin:'4px 0'}}>
+                        <span className={`status-badge`} style={{backgroundColor: cam.damage_detected ? '#f44336' : '#4caf50', color:'#fff', padding:'2px 8px', borderRadius:4, fontSize:12}}>
+                          {cam.damage_detected ? `Damage: ${cam.damage_type}` : 'Clean'}
+                        </span>
+                      </p>
+                      <p style={{fontSize:13,color:'#888'}}>Confidence: {(cam.confidence_score * 100).toFixed(1)}%</p>
+                      {cam.bounding_boxes.length > 0 && (
+                        <p style={{fontSize:12,color:'#aaa'}}>{cam.bounding_boxes.length} bounding box(es)</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : tunnelLoading ? (
+              <p>Loading tunnel events...</p>
+            ) : tunnelEvents.length === 0 ? (
+              <p>No tunnel scan events found.</p>
+            ) : (
+              <div className="tunnel-events-list">
+                <h2>Recent Tunnel Scans</h2>
+                <table style={{width:'100%',borderCollapse:'collapse',marginTop:12}}>
+                  <thead>
+                    <tr>
+                      <th style={{textAlign:'left',padding:'8px 12px',borderBottom:'1px solid #ddd'}}>Event</th>
+                      <th style={{textAlign:'left',padding:'8px 12px',borderBottom:'1px solid #ddd'}}>Plate</th>
+                      <th style={{textAlign:'center',padding:'8px 12px',borderBottom:'1px solid #ddd'}}>Cameras</th>
+                      <th style={{textAlign:'center',padding:'8px 12px',borderBottom:'1px solid #ddd'}}>Damage</th>
+                      <th style={{textAlign:'left',padding:'8px 12px',borderBottom:'1px solid #ddd'}}>Timestamp</th>
+                      <th style={{padding:'8px 12px',borderBottom:'1px solid #ddd'}}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tunnelEvents.map((ev) => (
+                      <tr key={ev.event_id}>
+                        <td style={{padding:'8px 12px',borderBottom:'1px solid #eee',fontFamily:'monospace',fontSize:13}}>{ev.event_id}</td>
+                        <td style={{padding:'8px 12px',borderBottom:'1px solid #eee'}}>{ev.license_plate || '—'}</td>
+                        <td style={{padding:'8px 12px',borderBottom:'1px solid #eee',textAlign:'center'}}>{ev.camera_count}</td>
+                        <td style={{padding:'8px 12px',borderBottom:'1px solid #eee',textAlign:'center'}}>
+                          <span style={{color: ev.any_damage ? '#f44336' : '#4caf50', fontWeight:600}}>
+                            {ev.any_damage ? 'Yes' : 'No'}
+                          </span>
+                        </td>
+                        <td style={{padding:'8px 12px',borderBottom:'1px solid #eee',fontSize:13}}>{ev.last_timestamp ? new Date(ev.last_timestamp).toLocaleString() : '—'}</td>
+                        <td style={{padding:'8px 12px',borderBottom:'1px solid #eee'}}>
+                          <button
+                            className="btn-small btn-outline"
+                            disabled={tunnelDetailLoading}
+                            onClick={() => loadTunnelDetail(ev.event_id)}
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* New Inspection Tab */}
         {activeTab === 'new-inspection' && (

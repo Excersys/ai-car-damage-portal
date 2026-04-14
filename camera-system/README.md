@@ -20,19 +20,20 @@ Automated pipeline that detects when a car enters a tunnel, captures images from
 |------|---------|
 | `pi/` | Raspberry Pi edge layer (capture, upload, trigger server) |
 | `pi/config.py` | Environment-based configuration |
-| `pi/camera_discover.py` | Discover USB (V4L2) and CSI cameras |
+| `pi/camera_discover.py` | Discover RTSP, USB (V4L2), and CSI cameras |
 | `pi/capture_service.py` | Multi-camera concurrent capture + compression |
 | `pi/s3_uploader.py` | S3 upload with fast-fail timeouts |
 | `pi/upload_queue.py` | SQLite-backed offline upload queue |
 | `pi/upload_worker.py` | Background worker that drains the queue |
 | `pi/trigger_server.py` | FastAPI server (sensor webhook + status endpoints) |
 | `infra/` | AWS CDK (Python) infrastructure-as-code |
-| `infra/stacks/storage_stack.py` | S3 bucket + DynamoDB table |
-| `infra/stacks/inference_stack.py` | DamageDetection Lambda + S3 trigger |
+| `infra/stacks/storage_stack.py` | S3 bucket, DynamoDB table, DamageDetection Lambda + S3 trigger |
 | `infra/stacks/api_stack.py` | API Gateway + ReviewAPI Lambda |
 | `infra/stacks/monitoring_stack.py` | CloudWatch alarms + dashboard |
 | `lambdas/damage_detection/` | Lambda: S3 event -> SageMaker -> DynamoDB |
 | `lambdas/review_api/` | Lambda: GET /tunnel/events/{event_id} |
+| `lambdas/review_api/contracts.py` | JSON contract validators (shared by tests) |
+| `docs/PI_TUNNEL_DEPLOYMENT.md` | Pi deployment, systemd, and ops guide |
 | `model/` | SageMaker model deployment script + config |
 | `scripts/` | Simulation and E2E test scripts |
 | `docs/` | PRD and Raspberry Pi setup guides |
@@ -62,9 +63,10 @@ The server starts on port 8000. Endpoints:
 |--------|------|---------|
 | POST | `/trigger` | Sensor webhook (capture + upload) |
 | POST | `/trigger/manual` | Manual trigger for testing |
-| GET | `/health` | Pi health check |
+| POST | `/scan/upload` | Accept pre-captured burst frames from detect_daemon |
+| GET | `/health` | Pi health check (S3, cameras, queue capacity) |
 | GET | `/cameras` | List discovered cameras |
-| GET | `/queue/status` | Offline queue stats |
+| GET | `/queue/status` | Offline queue stats + capacity |
 
 ### 3. Deploy AWS Infrastructure
 
@@ -105,6 +107,9 @@ python scripts/test_pipeline_e2e.py camera_062.jpg
 | `S3_BUCKET` | `tunnel-images` | S3 bucket name |
 | `LOCAL_STORAGE_PATH` | `/data/tunnel/images` | Local image storage directory |
 | `UPLOAD_QUEUE_DB` | `/data/tunnel/queue.db` | SQLite queue database path |
+| `MAX_UPLOAD_QUEUE_PENDING` | `5000` | Max queued rows; enqueue rejects when full |
+| `CAMERAS_JSON` | (none) | JSON list of RTSP camera configs |
+| `INCLUDE_USB_CAMERAS` | `false` | Also discover USB/CSI even with RTSP cameras |
 | `IMAGE_MAX_DIMENSION` | `1920` | Max image dimension (resize before upload) |
 | `IMAGE_JPEG_QUALITY` | `85` | JPEG compression quality |
 | `SERVER_PORT` | `8000` | FastAPI server port |
@@ -122,14 +127,24 @@ python scripts/test_pipeline_e2e.py camera_062.jpg
 ## Tests
 
 ```bash
-# Pi unit tests
+# Pi unit tests (71 tests)
 cd pi && source .venv/bin/activate
 pip install pytest-asyncio
 python -m pytest tests/ -v
 
-# CDK synth (validates infrastructure)
-cd infra && cdk synth
+# Review API contract + handler tests (10 tests)
+cd lambdas/review_api
+python -m pytest -v
+
+# Damage Detection handler tests (9 tests)
+cd lambdas/damage_detection
+python -m pytest -v
+
+# CDK synth (validates infrastructure — requires CLI >= 2.1118)
+cd infra && npx aws-cdk@2 synth -c account=<ACCOUNT> -c region=us-east-1
 ```
+
+All three Python test suites run in CI via the `test-camera-system` job in `.github/workflows/ci-cd.yml`.
 
 ## When the Sensor Arrives
 

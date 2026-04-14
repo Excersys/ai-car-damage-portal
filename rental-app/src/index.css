@@ -3281,6 +3281,104 @@ body {
   grid-column: 1 / -1;
 }
 
+.tunnel-inspection-feed {
+  margin-bottom: 2rem;
+}
+
+.tunnel-feed-hint {
+  color: #666;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.tunnel-feed-hint code {
+  background: #f0f0f0;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.tunnel-feed-status {
+  color: #666;
+  margin: 0;
+}
+
+.tunnel-feed-error {
+  color: #c62828;
+  margin: 0;
+}
+
+.tunnel-feed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.tunnel-feed-card {
+  display: flex;
+  gap: 0.75rem;
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 0.75rem;
+  border: 1px solid #eee;
+}
+
+.tunnel-feed-thumb {
+  width: 96px;
+  height: 72px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tunnel-feed-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tunnel-feed-no-image {
+  font-size: 11px;
+  color: #888;
+  padding: 0.25rem;
+  text-align: center;
+}
+
+.tunnel-feed-meta {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.tunnel-feed-id {
+  display: block;
+  font-size: 12px;
+  word-break: break-all;
+  margin-bottom: 0.25rem;
+}
+
+.tunnel-feed-plate,
+.tunnel-feed-time,
+.tunnel-feed-cams {
+  margin: 0.15rem 0;
+  color: #444;
+}
+
+.tunnel-feed-damage {
+  display: inline-block;
+  margin-top: 0.35rem;
+  background: #ffebee;
+  color: #c62828;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
 .section-header {
   display: flex;
   justify-content: space-between;

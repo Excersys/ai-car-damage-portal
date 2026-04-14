@@ -1,10 +1,9 @@
 import React from 'react'
-import { useLocation, useParams, Link } from 'react-router-dom'
+import { useLocation, Link } from 'react-router-dom'
 
 const BookingConfirmationPage: React.FC = () => {
   const location = useLocation()
-  const { bookingId } = useParams()
-  
+
   // Get booking data from navigation state
   const { booking, car, pricing, totalDays, bookingId: confirmationId } = location.state || {}
 

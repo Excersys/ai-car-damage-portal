@@ -125,19 +125,37 @@ class TestDiscoverAll:
         assert len(result) >= 1
         assert result[0].kind == "rtsp"
 
-    def test_includes_rtsp_and_usb(self):
-        """When both RTSP config and V4L2 devices exist, both are returned."""
+    def test_includes_rtsp_and_usb_when_include_usb_enabled(self):
+        """With INCLUDE_USB_CAMERAS, V4L2 is merged with RTSP."""
         rtsp_entry = [{"id": "cam_1", "url": "rtsp://x:y@10.0.0.1:554/"}]
         fake_usb = [CameraInfo(kind="usb", device="/dev/video0", name="video0", index=0)]
         with (
             patch("config.load_cameras_json", return_value=rtsp_entry),
+            patch("config.INCLUDE_USB_CAMERAS", True),
             patch("camera_discover.discover_v4l2_cameras", return_value=fake_usb),
+            patch("camera_discover.discover_csi_camera", return_value=None),
         ):
             result = discover_all()
 
         kinds = [c.kind for c in result]
         assert "rtsp" in kinds
         assert "usb" in kinds
+
+    def test_rtsp_only_skips_usb_by_default(self):
+        """When RTSP is configured, USB discovery is not run (tunnel PoE setup)."""
+        rtsp_entry = [{"id": "cam_1", "url": "rtsp://x:y@10.0.0.1:554/"}]
+        with (
+            patch("config.load_cameras_json", return_value=rtsp_entry),
+            patch("config.INCLUDE_USB_CAMERAS", False),
+            patch("camera_discover.discover_v4l2_cameras") as mock_v4l,
+            patch("camera_discover.discover_csi_camera") as mock_csi,
+        ):
+            result = discover_all()
+
+        mock_v4l.assert_not_called()
+        mock_csi.assert_not_called()
+        assert len(result) == 1
+        assert result[0].kind == "rtsp"
 
 
 # ---------------------------------------------------------------------------

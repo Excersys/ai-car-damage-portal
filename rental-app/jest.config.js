@@ -1,8 +1,10 @@
 module.exports = {
   preset: 'ts-jest',
+  roots: ['<rootDir>/src'],
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/src/setupTests.ts'],
-  moduleNameMapping: {
+  modulePathIgnorePatterns: ['<rootDir>/infrastructure/', '<rootDir>/camera-system/', '<rootDir>/dist/'],
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   collectCoverageFrom: [

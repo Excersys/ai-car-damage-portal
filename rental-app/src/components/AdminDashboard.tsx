@@ -2,15 +2,6 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './AdminDashboard.css';
 
-interface User {
-  username: string;
-  email: string;
-  role: string;
-  firstName: string;
-  lastName: string;
-  attributes: any;
-}
-
 interface DashboardOverview {
   totalBookings: number;
   activeBookings: number;
@@ -63,7 +54,6 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
-  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     fetchDashboardData();

@@ -404,7 +404,7 @@ When the daemon detects a vehicle, it runs a full scan pipeline:
 | `model/config.py` | Shared configuration |
 | `model/yolov8n.onnx` | YOLOv8-nano ONNX model (12.3 MB) |
 | `lambdas/damage_detection/handler.py` | Lambda: S3 trigger → SageMaker → DynamoDB |
-| `infra/stacks/inference_stack.py` | CDK stack for SageMaker + Lambda |
+| `infra/stacks/storage_stack.py` | CDK: bucket, table, SageMaker-invoking Lambda + S3 trigger |
 
 ---
 

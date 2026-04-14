@@ -22,6 +22,13 @@ class TestEnqueue:
         assert isinstance(item_id, str)
         assert len(item_id) == 16
 
+    def test_enqueue_refuses_when_pending_at_max(self, q, monkeypatch):
+        monkeypatch.setattr("upload_queue.config.MAX_UPLOAD_QUEUE_PENDING", 2)
+        assert q.enqueue("e", "c", "/a", "k") != ""
+        assert q.enqueue("e", "c", "/b", "k") != ""
+        assert q.enqueue("e", "c", "/c", "k") == ""
+        assert q.stats().pending == 2
+
     def test_enqueue_shows_in_stats(self, q):
         q.enqueue("evt1", "usb_0", "/tmp/a.jpg", "evt1/usb_0.jpg")
         q.enqueue("evt1", "usb_1", "/tmp/b.jpg", "evt1/usb_1.jpg")

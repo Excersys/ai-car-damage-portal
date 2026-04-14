@@ -163,6 +163,38 @@ class VehicleDetector:
         return detections
 
 
+def detect_vehicles(
+    model,
+    image: np.ndarray,
+    confidence: float = 0.5,
+    vehicle_classes: list[int] | None = None,
+) -> list[dict]:
+    """Detect vehicles using an ultralytics-style YOLO model.
+
+    This is a convenience wrapper for callers that pass a pre-loaded
+    ultralytics model (``model(image, conf=...)``).  The ONNX-based
+    ``VehicleDetector.detect()`` is preferred for production use.
+    """
+    classes = vehicle_classes if vehicle_classes is not None else list(COCO_VEHICLE_NAMES.keys())
+    results = model(image, conf=confidence, verbose=False)
+
+    detections: list[dict] = []
+    for result in results:
+        for box in result.boxes:
+            cls_id = int(box.cls[0])
+            if cls_id not in classes:
+                continue
+            conf_val = float(box.conf[0])
+            bbox = [float(v) for v in box.xyxy[0]]
+            detections.append({
+                "class_id": cls_id,
+                "class_name": COCO_VEHICLE_NAMES.get(cls_id, f"class_{cls_id}"),
+                "confidence": round(conf_val, 3),
+                "bbox": [round(v, 1) for v in bbox],
+            })
+    return detections
+
+
 # ---------------------------------------------------------------------------
 # Image acquisition
 # ---------------------------------------------------------------------------

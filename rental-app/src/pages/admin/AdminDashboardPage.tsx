@@ -1,7 +1,42 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  fetchTunnelEvents,
+  isTunnelReviewConfigured,
+  type TunnelEventSummary,
+} from '../../lib/tunnelReviewApi'
 
 const AdminDashboardPage: React.FC = () => {
+  const [tunnelEvents, setTunnelEvents] = useState<TunnelEventSummary[]>([])
+  const [tunnelLoading, setTunnelLoading] = useState(false)
+  const [tunnelError, setTunnelError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isTunnelReviewConfigured()) {
+      setTunnelError(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      setTunnelLoading(true)
+      setTunnelError(null)
+      try {
+        const data = await fetchTunnelEvents()
+        if (!cancelled) {
+          setTunnelEvents(data.events ?? [])
+        }
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setTunnelError(e instanceof Error ? e.message : 'Failed to load tunnel events')
+        }
+      } finally {
+        if (!cancelled) setTunnelLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
   // Mock data - in real app, this would come from API
   const [dashboardData] = useState({
     metrics: {
@@ -62,7 +97,7 @@ const AdminDashboardPage: React.FC = () => {
       <div className="admin-container">
         <div className="dashboard-header">
           <h1>Dashboard</h1>
-          <p>Welcome back! Here's what's happening with your rental business.</p>
+          <p>Welcome back! Here&apos;s what&apos;s happening with your rental business.</p>
         </div>
 
         {/* Key Metrics */}
@@ -102,6 +137,60 @@ const AdminDashboardPage: React.FC = () => {
               <span className="metric-change positive">+8 this week</span>
             </div>
           </div>
+        </div>
+
+        <div className="dashboard-section full-width tunnel-inspection-feed">
+          <div className="section-header">
+            <h2>Tunnel inspection feed</h2>
+            <Link to="/admin/damage-detection" className="section-link">Damage detection</Link>
+          </div>
+          {!isTunnelReviewConfigured() && (
+            <p className="tunnel-feed-hint">
+              Connect live tunnel data by setting <code>VITE_TUNNEL_REVIEW_API_BASE_URL</code> and{' '}
+              <code>VITE_TUNNEL_REVIEW_API_KEY</code> (from the camera-system Tunnel API deployment).
+            </p>
+          )}
+          {isTunnelReviewConfigured() && tunnelLoading && (
+            <p className="tunnel-feed-status">Loading tunnel events…</p>
+          )}
+          {isTunnelReviewConfigured() && tunnelError && (
+            <p className="tunnel-feed-error" role="alert">
+              {tunnelError}
+            </p>
+          )}
+          {isTunnelReviewConfigured() && !tunnelLoading && !tunnelError && tunnelEvents.length === 0 && (
+            <p className="tunnel-feed-status">No tunnel scan events in DynamoDB yet.</p>
+          )}
+          {tunnelEvents.length > 0 && (
+            <div className="tunnel-feed-grid">
+              {tunnelEvents.map((ev) => (
+                <div key={ev.event_id} className="tunnel-feed-card">
+                  <div className="tunnel-feed-thumb">
+                    {ev.preview_image_url ? (
+                      <img src={ev.preview_image_url} alt="" loading="lazy" />
+                    ) : (
+                      <span className="tunnel-feed-no-image">No preview</span>
+                    )}
+                  </div>
+                  <div className="tunnel-feed-meta">
+                    <code className="tunnel-feed-id">{ev.event_id}</code>
+                    <p className="tunnel-feed-plate">
+                      Plate: {ev.license_plate || '—'}
+                    </p>
+                    <p className="tunnel-feed-time">
+                      {ev.last_timestamp
+                        ? new Date(ev.last_timestamp).toLocaleString()
+                        : '—'}
+                    </p>
+                    <p className="tunnel-feed-cams">{ev.camera_count} camera(s)</p>
+                    {ev.any_damage && (
+                      <span className="tunnel-feed-damage">Damage flagged</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Alerts Section */}
@@ -153,7 +242,7 @@ const AdminDashboardPage: React.FC = () => {
           {/* Upcoming Reservations */}
           <div className="dashboard-section">
             <div className="section-header">
-              <h2>Today's Pickups</h2>
+              <h2>Today&apos;s Pickups</h2>
               <Link to="/admin/reservations" className="section-link">Manage All</Link>
             </div>
             <div className="reservations-list">

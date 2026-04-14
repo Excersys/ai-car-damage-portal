@@ -49,9 +49,18 @@ class S3Result:
     error: str = ""
 
 
-def s3_key_for(event_id: str, camera_id: str) -> str:
-    """Build the S3 object key for an image."""
-    return f"{event_id}/{camera_id}.jpg"
+def s3_key_for(
+    event_id: str,
+    camera_id: str,
+    plate: str = "unknown",
+    frame_index: int = 0,
+) -> str:
+    """Build the S3 object key matching the inference Lambda expected format.
+
+    Format: scans/{plate}/{event_id}/{camera_id}/frame_NNNN.jpg
+    """
+    plate = plate.strip() or "unknown"
+    return f"scans/{plate}/{event_id}/{camera_id}/frame_{frame_index:04d}.jpg"
 
 
 def upload_image(local_path: Path, s3_key: str, camera_id: str = "") -> S3Result:
@@ -84,10 +93,16 @@ def upload_image(local_path: Path, s3_key: str, camera_id: str = "") -> S3Result
 def upload_event(
     event_id: str,
     captures: list,
+    plate: str = "unknown",
 ) -> list[S3Result]:
     """
     Upload all captured images for an event in parallel.
-    Only attempts upload for successful captures.
+
+    Args:
+        event_id: Unique scan event identifier.
+        captures: List of capture results (must have .success, .camera_id, .local_path).
+        plate: Recognised license plate string; falls back to "unknown".
+
     Returns a list of S3Result (one per capture).
     """
     to_upload = [c for c in captures if c.success]
@@ -98,8 +113,8 @@ def upload_event(
 
     with ThreadPoolExecutor(max_workers=len(to_upload)) as pool:
         futures = {}
-        for cap in to_upload:
-            s3_key = s3_key_for(event_id, cap.camera_id)
+        for idx, cap in enumerate(to_upload):
+            s3_key = s3_key_for(event_id, cap.camera_id, plate=plate, frame_index=idx)
             fut = pool.submit(upload_image, cap.local_path, s3_key, cap.camera_id)
             futures[fut] = cap.camera_id
 
@@ -113,7 +128,7 @@ def upload_event(
                     S3Result(
                         camera_id=cid,
                         local_path=Path(""),
-                        s3_key=s3_key_for(event_id, cid),
+                        s3_key=s3_key_for(event_id, cid, plate=plate),
                         success=False,
                         error=str(exc),
                     )

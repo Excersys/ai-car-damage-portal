@@ -38,7 +38,11 @@ def main() -> int:
 
     event_id = f"e2e-test-{uuid.uuid4().hex[:8]}"
     camera_id = "test_cam_0"
-    s3_key = f"{event_id}/{camera_id}.jpg"
+    plate = "E2EPLATE"
+    frame_stem = "frame_0000"
+    # Must match inference Lambda prefix filter (scans/) and key parser
+    s3_key = f"scans/{plate}/{event_id}/{camera_id}/{frame_stem}.jpg"
+    camera_frame = f"{camera_id}#{frame_stem}"
 
     print(f"Event ID:  {event_id}")
     print(f"S3 Key:    {s3_key}")
@@ -56,7 +60,7 @@ def main() -> int:
     print()
 
     print("2. Waiting for Lambda to process (polling DynamoDB)...")
-    result = _poll_dynamodb(event_id, camera_id, timeout_s=60)
+    result = _poll_dynamodb(event_id, camera_frame, timeout_s=60)
 
     if result is None:
         print("   TIMEOUT: No result found in DynamoDB after 60s", file=sys.stderr)
@@ -72,7 +76,7 @@ def main() -> int:
 
     print("3. Cleaning up test data...")
     s3.delete_object(Bucket=S3_BUCKET, Key=s3_key)
-    table.delete_item(Key={"event_id": event_id, "camera_id": camera_id})
+    table.delete_item(Key={"event_id": event_id, "camera_frame": camera_frame})
     print("   Cleaned up.")
     print()
 
@@ -80,11 +84,11 @@ def main() -> int:
     return 0
 
 
-def _poll_dynamodb(event_id: str, camera_id: str, timeout_s: int = 60) -> dict | None:
+def _poll_dynamodb(event_id: str, camera_frame: str, timeout_s: int = 60) -> dict | None:
     """Poll DynamoDB until the result appears or timeout."""
     deadline = time.time() + timeout_s
     while time.time() < deadline:
-        resp = table.get_item(Key={"event_id": event_id, "camera_id": camera_id})
+        resp = table.get_item(Key={"event_id": event_id, "camera_frame": camera_frame})
         item = resp.get("Item")
         if item:
             return item

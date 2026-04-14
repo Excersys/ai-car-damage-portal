@@ -8,7 +8,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from contracts import validate_event_detail_response, validate_event_list_response
+from contracts import (
+    validate_event_detail_response,
+    validate_event_list_response,
+    validate_qc_post_request,
+)
 
 
 @pytest.fixture
@@ -71,6 +75,7 @@ def test_list_events_response_matches_contract(env_vars):
     assert body["events"][0]["event_id"] == "evt1"
     assert body["events"][0]["any_damage"] is True
     assert body["events"][0]["camera_count"] == 2
+    assert body["events"][0]["qc_status"] == "pending"
 
 
 def test_get_event_detail_response_matches_contract(env_vars):
@@ -104,6 +109,7 @@ def test_get_event_detail_response_matches_contract(env_vars):
                 event = {
                     "pathParameters": {"event_id": "evt2"},
                     "httpMethod": "GET",
+                    "resource": "/tunnel/events/{event_id}",
                 }
                 resp = handler.lambda_handler(event, None)
 
@@ -114,3 +120,47 @@ def test_get_event_detail_response_matches_contract(env_vars):
     assert body["any_damage"] is True
     assert body["cameras"][0]["confidence_score"] == 0.85
     assert body["cameras"][0]["bounding_boxes"] == []
+    assert body["qc"] is None
+
+
+def test_post_qc_persists_and_validates(env_vars):
+    mock_table = MagicMock()
+    mock_s3 = MagicMock()
+    mock_s3.generate_presigned_url.return_value = "https://x"
+
+    with patch.dict(os.environ, env_vars, clear=False):
+        with patch("boto3.resource") as mock_resource:
+            mock_resource.return_value.Table.return_value = mock_table
+            with patch("boto3.client", return_value=mock_s3):
+                handler = _reload_handler(env_vars)
+
+                event = {
+                    "pathParameters": {"event_id": "evt9"},
+                    "httpMethod": "POST",
+                    "resource": "/tunnel/events/{event_id}/qc",
+                    "body": json.dumps(
+                        {
+                            "status": "approved",
+                            "notes": "looks ok",
+                            "reviewer_id": "agent-1",
+                        }
+                    ),
+                }
+                resp = handler.lambda_handler(event, None)
+
+    assert resp["statusCode"] == 200
+    out = json.loads(resp["body"])
+    assert out["event_id"] == "evt9"
+    assert out["qc"]["status"] == "approved"
+    validate_qc_post_request(
+        {
+            "status": "approved",
+            "notes": "looks ok",
+            "reviewer_id": "agent-1",
+        }
+    )
+    mock_table.put_item.assert_called_once()
+    put = mock_table.put_item.call_args[1]["Item"]
+    assert put["event_id"] == "evt9"
+    assert put["camera_frame"] == "__qc__"
+    assert put["qc_status"] == "approved"

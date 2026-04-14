@@ -5,6 +5,7 @@ import {
   isTunnelReviewConfigured,
   type TunnelEventSummary,
 } from '../../lib/tunnelReviewApi'
+import { fetchAdminDashboard } from '../../lib/adminApi'
 
 const AdminDashboardPage: React.FC = () => {
   const [tunnelEvents, setTunnelEvents] = useState<TunnelEventSummary[]>([])
@@ -37,8 +38,8 @@ const AdminDashboardPage: React.FC = () => {
       cancelled = true
     }
   }, [])
-  // Mock data - in real app, this would come from API
-  const [dashboardData] = useState({
+
+  const [dashboardData, setDashboardData] = useState({
     metrics: {
       totalRevenue: 45280,
       activeReservations: 23,
@@ -70,6 +71,26 @@ const AdminDashboardPage: React.FC = () => {
       { id: 3, type: 'booking', message: '5 new reservations require identity verification', priority: 'medium' },
     ]
   })
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const live = await fetchAdminDashboard()
+      if (cancelled || !live) return
+      setDashboardData((prev) => ({
+        ...prev,
+        metrics: {
+          ...prev.metrics,
+          totalRevenue: Math.round(live.overview.totalRevenue),
+          activeReservations: live.overview.activeBookings,
+          availableVehicles: live.overview.availableVehicles,
+        },
+      }))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -183,6 +204,9 @@ const AdminDashboardPage: React.FC = () => {
                         : '—'}
                     </p>
                     <p className="tunnel-feed-cams">{ev.camera_count} camera(s)</p>
+                    <p className="tunnel-feed-cams" style={{ fontSize: 12 }}>
+                      QC: {ev.qc_status || 'pending'}
+                    </p>
                     {ev.any_damage && (
                       <span className="tunnel-feed-damage">Damage flagged</span>
                     )}

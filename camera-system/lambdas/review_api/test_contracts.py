@@ -20,6 +20,7 @@ def test_validate_list_accepts_valid_payload():
                 "any_damage": False,
                 "camera_count": 2,
                 "preview_image_url": "https://example.com/p",
+                "qc_status": "pending",
             }
         ],
         "count": 1,
@@ -43,6 +44,7 @@ def test_validate_list_allows_extra_keys_on_event():
                 "any_damage": True,
                 "camera_count": 1,
                 "preview_image_url": "",
+                "qc_status": "approved",
                 "future_field": 1,
             }
         ],
@@ -56,6 +58,7 @@ def test_validate_detail_accepts_valid_payload():
         "event_id": "e1",
         "total_cameras": 1,
         "any_damage": False,
+        "qc": None,
         "cameras": [
             {
                 "camera_id": "c0",
@@ -89,10 +92,38 @@ def test_validate_detail_rejects_wrong_total():
         "event_id": "e1",
         "total_cameras": 2,
         "any_damage": False,
+        "qc": None,
         "cameras": [cam],
     }
     with pytest.raises(ContractError, match="total_cameras"):
         validate_event_detail_response(body)
+
+
+def test_validate_detail_with_qc_object():
+    cam = {
+        "camera_id": "c0",
+        "camera_frame": "c0#f1",
+        "frame": "f1",
+        "image_url": "",
+        "damage_detected": False,
+        "damage_type": "none",
+        "confidence_score": 0.0,
+        "bounding_boxes": [],
+        "timestamp": "t",
+    }
+    body = {
+        "event_id": "e1",
+        "total_cameras": 1,
+        "any_damage": False,
+        "qc": {
+            "status": "approved",
+            "notes": "ok",
+            "reviewer_id": "u1",
+            "updated_at": "2026-01-01T00:00:00Z",
+        },
+        "cameras": [cam],
+    }
+    validate_event_detail_response(body)
 
 
 def test_validate_stored_row():

@@ -41,3 +41,26 @@ def test_aggregate_groups_by_event_and_picks_latest_timestamp():
 
 def test_aggregate_skips_rows_without_event_id():
     assert aggregate_event_summaries([{"camera_id": "x"}]) == []
+
+
+def test_aggregate_merges_qc_row():
+    items = [
+        {
+            "event_id": "e1",
+            "camera_id": "cam-a",
+            "camera_frame": "cam-a#f1",
+            "timestamp": "2026-04-01T10:00:00+00:00",
+            "license_plate": "ABC",
+            "damage_detected": False,
+            "image_path": "scans/ABC/e1/cam-a/frame_0001.jpg",
+        },
+        {
+            "event_id": "e1",
+            "camera_frame": "__qc__",
+            "qc_status": "approved",
+        },
+    ]
+    out = aggregate_event_summaries(items)
+    assert len(out) == 1
+    assert out[0]["qc_status"] == "approved"
+    assert out[0]["camera_count"] == 1

@@ -1,2 +1,6 @@
 # Bundled with Lambda runtime — listed for documentation
 boto3
+# Used when INFERENCE_MODE=onnx (consider a Lambda layer if the deployment package is too large)
+numpy
+Pillow
+onnxruntime

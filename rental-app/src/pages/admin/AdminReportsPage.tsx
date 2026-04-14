@@ -1,10 +1,46 @@
+import React, { useEffect, useState } from 'react'
+import { fetchAdminFinancialAnalytics } from '../../lib/adminApi'
+
+const DEMO_METRICS = [
+  { label: 'Monthly Revenue', value: '$45,280', change: '+12%' },
+  { label: 'Total Bookings', value: '156', change: '+8%' },
+  { label: 'Fleet Utilization', value: '67%', change: '+3%' },
+  { label: 'Damage Reports', value: '12', change: '-15%' },
+]
+
 const AdminReportsPage: React.FC = () => {
-  const metrics = [
-    { label: 'Monthly Revenue', value: '$45,280', change: '+12%' },
-    { label: 'Total Bookings', value: '156', change: '+8%' },
-    { label: 'Fleet Utilization', value: '67%', change: '+3%' },
-    { label: 'Damage Reports', value: '12', change: '-15%' },
-  ]
+  const [metrics, setMetrics] = useState(DEMO_METRICS)
+  const [source, setSource] = useState<'demo' | 'api'>('demo')
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const s = await fetchAdminFinancialAnalytics()
+      if (cancelled || !s) return
+      setSource('api')
+      setMetrics([
+        {
+          label: 'Total revenue (period)',
+          value: `$${s.totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+          change: `${s.revenueGrowth >= 0 ? '+' : ''}${s.revenueGrowth.toFixed(1)}%`,
+        },
+        {
+          label: 'Total bookings',
+          value: String(s.totalBookings),
+          change: `${s.bookingGrowth >= 0 ? '+' : ''}${s.bookingGrowth.toFixed(1)}%`,
+        },
+        {
+          label: 'Avg booking value',
+          value: `$${s.averageBookingValue.toFixed(2)}`,
+          change: '—',
+        },
+        { label: 'Net revenue (demo slot)', value: '—', change: '—' },
+      ])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <div className="admin-dashboard">
@@ -14,13 +50,22 @@ const AdminReportsPage: React.FC = () => {
           <p>Business analytics and performance metrics.</p>
         </div>
 
+        {source === 'demo' && (
+          <p style={{ fontSize: 14, color: '#666', marginBottom: '1rem' }}>
+            Showing placeholders until <code>GET /admin/analytics/financial</code> succeeds (Fleet Manager role,{' '}
+            <code>VITE_API_BASE_URL</code>).
+          </p>
+        )}
+
         <div className="metrics-grid">
           {metrics.map((m, i) => (
             <div key={i} className="metric-card">
               <div className="metric-content">
                 <h3>{m.value}</h3>
                 <p>{m.label}</p>
-                <span className={`metric-change ${m.change.startsWith('+') ? 'positive' : m.change.startsWith('-') ? 'negative' : 'neutral'}`}>
+                <span
+                  className={`metric-change ${m.change.startsWith('+') ? 'positive' : m.change.startsWith('-') ? 'negative' : 'neutral'}`}
+                >
                   {m.change} from last month
                 </span>
               </div>

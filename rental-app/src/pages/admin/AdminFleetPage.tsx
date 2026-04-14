@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { fetchAdminVehicles, type AdminVehicleRow } from '../../lib/adminApi'
 
 interface Vehicle {
   id: string
@@ -27,6 +28,33 @@ interface Vehicle {
   imageUrl?: string
 }
 
+function mapApiVehicle(v: AdminVehicleRow): Vehicle {
+  const st = (v.status || 'available').toLowerCase()
+  const status: Vehicle['status'] =
+    st === 'rented' || st === 'maintenance' || st === 'retired' ? st : 'available'
+  return {
+    id: v.id,
+    make: v.make,
+    model: v.model,
+    year: v.year,
+    licensePlate: v.licensePlate,
+    vin: '',
+    color: '—',
+    category: 'midsize',
+    status,
+    mileage: v.mileage ?? 0,
+    dailyRate: v.dailyRate ?? 0,
+    location: v.location ?? '—',
+    features: [],
+    lastService: '—',
+    nextService: '—',
+    insurance: { provider: '—', policyNumber: '—', expiryDate: '—' },
+    registrationExpiry: '—',
+    purchaseDate: '—',
+    purchasePrice: 0,
+  }
+}
+
 const AdminFleetPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview')
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
@@ -35,8 +63,7 @@ const AdminFleetPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterCategory, setFilterCategory] = useState('all')
 
-  // Mock fleet data
-  const mockFleet: Vehicle[] = [
+  const MOCK_FLEET: Vehicle[] = [
     {
       id: '1',
       make: 'Tesla',
@@ -165,6 +192,20 @@ const AdminFleetPage: React.FC = () => {
     }
   ]
 
+  const [fleet, setFleet] = useState<Vehicle[]>(MOCK_FLEET)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const rows = await fetchAdminVehicles()
+      if (cancelled || !rows?.length) return
+      setFleet(rows.map(mapApiVehicle))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'available': return '#4caf50'
@@ -189,7 +230,7 @@ const AdminFleetPage: React.FC = () => {
   }
 
   const filterVehicles = () => {
-    let filtered = mockFleet
+    let filtered = fleet
     
     if (filterStatus !== 'all') {
       filtered = filtered.filter(vehicle => vehicle.status === filterStatus)
@@ -203,13 +244,13 @@ const AdminFleetPage: React.FC = () => {
   }
 
   const getFleetStats = () => {
-    const total = mockFleet.length
-    const available = mockFleet.filter(v => v.status === 'available').length
-    const rented = mockFleet.filter(v => v.status === 'rented').length
-    const maintenance = mockFleet.filter(v => v.status === 'maintenance').length
+    const total = fleet.length
+    const available = fleet.filter(v => v.status === 'available').length
+    const rented = fleet.filter(v => v.status === 'rented').length
+    const maintenance = fleet.filter(v => v.status === 'maintenance').length
     const utilization = Math.round((rented / total) * 100)
-    const avgMileage = Math.round(mockFleet.reduce((acc, v) => acc + v.mileage, 0) / total)
-    const totalValue = mockFleet.reduce((acc, v) => acc + v.purchasePrice, 0)
+    const avgMileage = Math.round(fleet.reduce((acc, v) => acc + v.mileage, 0) / total)
+    const totalValue = fleet.reduce((acc, v) => acc + v.purchasePrice, 0)
 
     return {
       total,
@@ -268,7 +309,7 @@ const AdminFleetPage: React.FC = () => {
             className={`tab ${activeTab === 'vehicles' ? 'active' : ''}`}
             onClick={() => setActiveTab('vehicles')}
           >
-            🚙 Vehicles ({mockFleet.length})
+            🚙 Vehicles ({fleet.length})
           </button>
           <button 
             className={`tab ${activeTab === 'maintenance' ? 'active' : ''}`}
@@ -339,8 +380,8 @@ const AdminFleetPage: React.FC = () => {
               <h3>Fleet Composition</h3>
               <div className="composition-grid">
                 {['economy', 'compact', 'midsize', 'fullsize', 'suv', 'luxury', 'electric'].map(category => {
-                  const count = mockFleet.filter(v => v.category === category).length
-                  const percentage = Math.round((count / mockFleet.length) * 100)
+                  const count = fleet.filter(v => v.category === category).length
+                  const percentage = Math.round((count / fleet.length) * 100)
                   
                   return (
                     <div key={category} className="composition-item">
@@ -481,7 +522,7 @@ const AdminFleetPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {mockFleet.map(vehicle => (
+                  {fleet.map(vehicle => (
                     <tr key={vehicle.id}>
                       <td>
                         <div className="vehicle-name">

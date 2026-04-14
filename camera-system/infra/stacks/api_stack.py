@@ -42,7 +42,7 @@ class ApiStack(cdk.Stack):
             },
         )
 
-        events_table.grant_read_data(self.review_fn)
+        events_table.grant_read_write_data(self.review_fn)
         image_bucket.grant_read(self.review_fn)
 
         api = apigw.RestApi(
@@ -53,7 +53,7 @@ class ApiStack(cdk.Stack):
             deploy_options=apigw.StageOptions(stage_name="v1"),
             default_cors_preflight_options=apigw.CorsOptions(
                 allow_origins=apigw.Cors.ALL_ORIGINS,
-                allow_methods=["GET", "OPTIONS"],
+                allow_methods=["GET", "POST", "OPTIONS"],
                 allow_headers=[
                     "Content-Type",
                     "X-Api-Key",
@@ -84,6 +84,13 @@ class ApiStack(cdk.Stack):
 
         event_by_id.add_method(
             "GET",
+            apigw.LambdaIntegration(self.review_fn),
+            api_key_required=True,
+        )
+
+        event_qc = event_by_id.add_resource("qc")
+        event_qc.add_method(
+            "POST",
             apigw.LambdaIntegration(self.review_fn),
             api_key_required=True,
         )

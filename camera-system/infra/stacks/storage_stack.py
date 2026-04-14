@@ -3,6 +3,8 @@ Storage stack: S3 bucket, DynamoDB table, and damage-detection Lambda (same stac
 as the bucket so S3 event notifications do not create a cross-stack dependency cycle).
 """
 
+from typing import Optional
+
 from constructs import Construct
 import aws_cdk as cdk
 from aws_cdk import (
@@ -17,7 +19,15 @@ from aws_cdk import (
 class StorageStack(cdk.Stack):
     """S3 bucket, DynamoDB table, and Lambda processing for tunnel damage detection."""
 
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        *,
+        grant_sagemaker_invoke: bool = True,
+        onnx_layer_arn: Optional[str] = None,
+        **kwargs,
+    ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         self.image_bucket = s3.Bucket(
@@ -75,6 +85,31 @@ class StorageStack(cdk.Stack):
             description="Minimum confidence score to flag damage",
         )
 
+        inference_mode = cdk.CfnParameter(
+            self,
+            "InferenceMode",
+            type="String",
+            default="sagemaker",
+            allowed_values=["sagemaker", "onnx", "stub"],
+            description="sagemaker=SageMaker endpoint; onnx=CPU ONNX in Lambda; stub=placeholder output",
+        )
+
+        onnx_model_path = cdk.CfnParameter(
+            self,
+            "OnnxModelPath",
+            type="String",
+            default="/opt/models/model.onnx",
+            description="Filesystem path to the ONNX model when InferenceMode=onnx",
+        )
+
+        layers = []
+        if onnx_layer_arn:
+            layers.append(
+                _lambda.LayerVersion.from_layer_version_arn(
+                    self, "DamageDetectionOnnxLayer", onnx_layer_arn
+                )
+            )
+
         self.damage_detection_fn = _lambda.Function(
             self,
             "DamageDetectionFn",
@@ -82,10 +117,13 @@ class StorageStack(cdk.Stack):
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="handler.lambda_handler",
             code=_lambda.Code.from_asset("../lambdas/damage_detection"),
-            memory_size=512,
+            layers=layers,
+            memory_size=1024,
             timeout=cdk.Duration.seconds(60),
             environment={
+                "INFERENCE_MODE": inference_mode.value_as_string,
                 "SAGEMAKER_ENDPOINT": sagemaker_endpoint_name.value_as_string,
+                "ONNX_MODEL_PATH": onnx_model_path.value_as_string,
                 "DYNAMODB_TABLE": self.events_table.table_name,
                 "CONFIDENCE_THRESHOLD": confidence_threshold.value_as_string,
             },
@@ -94,15 +132,16 @@ class StorageStack(cdk.Stack):
         self.image_bucket.grant_read(self.damage_detection_fn)
         self.events_table.grant_write_data(self.damage_detection_fn)
 
-        self.damage_detection_fn.add_to_role_policy(
-            iam.PolicyStatement(
-                actions=["sagemaker:InvokeEndpoint"],
-                resources=[
-                    f"arn:aws:sagemaker:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}"
-                    f":endpoint/{sagemaker_endpoint_name.value_as_string}",
-                ],
+        if grant_sagemaker_invoke:
+            self.damage_detection_fn.add_to_role_policy(
+                iam.PolicyStatement(
+                    actions=["sagemaker:InvokeEndpoint"],
+                    resources=[
+                        f"arn:aws:sagemaker:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}"
+                        f":endpoint/{sagemaker_endpoint_name.value_as_string}",
+                    ],
+                )
             )
-        )
 
         self.image_bucket.add_event_notification(
             s3.EventType.OBJECT_CREATED,

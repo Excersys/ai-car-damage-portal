@@ -1,6 +1,7 @@
 """
 ReviewAPI Lambda handler.
-Handles GET /tunnel/events (list) and GET /tunnel/events/{event_id} (detail).
+Handles GET /tunnel/events (list), GET /tunnel/events/{event_id} (detail),
+and POST /tunnel/events/{event_id}/qc (QC decision).
 Queries DynamoDB and returns presigned S3 URLs for images.
 """
 
@@ -9,12 +10,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 import boto3
 from boto3.dynamodb.conditions import Key
 
-from aggregation import aggregate_event_summaries
+from aggregation import QC_SORT_KEY, aggregate_event_summaries
+from contracts import ContractError, validate_qc_post_request
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -31,7 +34,22 @@ s3_client = boto3.client("s3")
 
 
 def lambda_handler(event: dict, context) -> dict:
-    """API Gateway proxy handler for event list and event detail."""
+    """API Gateway proxy handler for event list, detail, and QC POST."""
+    method = (
+        event.get("httpMethod")
+        or event.get("requestContext", {}).get("http", {}).get("method")
+        or "GET"
+    ).upper()
+
+    if method == "OPTIONS":
+        return _response(200, {})
+
+    resource = event.get("resource") or ""
+    path = (event.get("path") or "").rstrip("/")
+
+    if method == "POST" and (resource.endswith("/qc") or path.endswith("/qc")):
+        return _post_qc(event)
+
     path_params = event.get("pathParameters") or {}
     event_id = path_params.get("event_id")
 
@@ -70,7 +88,7 @@ def _list_events() -> dict:
 
 
 def _get_event_detail(event_id: str) -> dict:
-    """GET /tunnel/events/{event_id} — all cameras for one event."""
+    """GET /tunnel/events/{event_id} — all cameras for one event plus optional QC row."""
     logger.info("Fetching results for event_id=%s", event_id)
 
     try:
@@ -83,8 +101,19 @@ def _get_event_detail(event_id: str) -> dict:
     if not items:
         return _response(404, {"error": f"Event {event_id} not found"})
 
-    cameras = []
+    qc_row: dict[str, Any] | None = None
+    camera_items: list[dict[str, Any]] = []
     for item in items:
+        if item.get("camera_frame") == QC_SORT_KEY:
+            qc_row = item
+        else:
+            camera_items.append(item)
+
+    if not camera_items:
+        return _response(404, {"error": f"Event {event_id} not found"})
+
+    cameras = []
+    for item in camera_items:
         image_url = _presigned_url(item.get("image_path", ""))
         cameras.append({
             "camera_id": item["camera_id"],
@@ -98,14 +127,86 @@ def _get_event_detail(event_id: str) -> dict:
             "timestamp": item.get("timestamp", ""),
         })
 
+    qc_out: dict[str, Any] | None
+    if qc_row:
+        qc_out = {
+            "status": qc_row.get("qc_status", "pending"),
+            "notes": qc_row.get("qc_notes", "") or "",
+            "reviewer_id": qc_row.get("reviewer_id", "") or "",
+            "updated_at": qc_row.get("qc_updated_at", "") or "",
+        }
+    else:
+        qc_out = None
+
     body = {
         "event_id": event_id,
         "cameras": cameras,
         "total_cameras": len(cameras),
         "any_damage": any(c["damage_detected"] for c in cameras),
+        "qc": qc_out,
     }
 
     return _response(200, body)
+
+
+def _post_qc(event: dict) -> dict:
+    """POST /tunnel/events/{event_id}/qc — upsert QC metadata for an event."""
+    params = event.get("pathParameters") or {}
+    event_id = params.get("event_id")
+    if not event_id:
+        return _response(400, {"error": "missing event_id"})
+
+    raw = event.get("body") or "{}"
+    try:
+        body = json.loads(raw) if isinstance(raw, str) else raw
+    except json.JSONDecodeError:
+        return _response(400, {"error": "invalid JSON"})
+
+    if not isinstance(body, dict):
+        return _response(400, {"error": "body must be a JSON object"})
+
+    try:
+        validate_qc_post_request(body)
+    except ContractError as err:
+        return _response(400, {"error": str(err)})
+
+    status = body["status"]
+    notes = body.get("notes", "")
+    if not isinstance(notes, str):
+        notes = str(notes)
+    reviewer_id = body.get("reviewer_id", "")
+    if not isinstance(reviewer_id, str):
+        reviewer_id = str(reviewer_id)
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    item = {
+        "event_id": event_id,
+        "camera_frame": QC_SORT_KEY,
+        "qc_status": status,
+        "qc_notes": notes,
+        "reviewer_id": reviewer_id,
+        "qc_updated_at": now,
+    }
+
+    try:
+        table.put_item(Item=item)
+    except Exception:
+        logger.exception("QC put_item failed")
+        return _response(500, {"error": "Internal server error"})
+
+    return _response(
+        200,
+        {
+            "event_id": event_id,
+            "qc": {
+                "status": status,
+                "notes": notes,
+                "reviewer_id": reviewer_id,
+                "updated_at": now,
+            },
+        },
+    )
 
 
 def _presigned_url(s3_key: str) -> str:

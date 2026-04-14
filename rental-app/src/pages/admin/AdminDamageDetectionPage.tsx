@@ -1,11 +1,86 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, type CSSProperties } from 'react'
 import {
   isTunnelReviewConfigured,
   fetchTunnelEvents,
   fetchTunnelEventDetail,
+  submitTunnelEventQc,
   type TunnelEventSummary,
   type TunnelEventDetailResponse,
 } from '../../lib/tunnelReviewApi'
+
+/** Scale bbox coords (pixel or normalized 0–1) to rendered image pixels. */
+function bboxOverlayStyle(
+  box: Record<string, number>,
+  naturalW: number,
+  naturalH: number,
+  displayW: number,
+  displayH: number,
+): CSSProperties {
+  const x = box.x ?? box.left ?? 0
+  const y = box.y ?? box.top ?? 0
+  const w = box.w ?? box.width ?? 0
+  const h = box.h ?? box.height ?? 0
+  const nums = [x, y, w, h].filter((n) => typeof n === 'number')
+  const normalized = nums.length > 0 && Math.max(...nums) <= 1.0001
+  let left: number
+  let top: number
+  let bw: number
+  let bh: number
+  if (normalized) {
+    left = x * displayW
+    top = y * displayH
+    bw = w * displayW
+    bh = h * displayH
+  } else {
+    const sx = displayW / Math.max(naturalW, 1)
+    const sy = displayH / Math.max(naturalH, 1)
+    left = x * sx
+    top = y * sy
+    bw = w * sx
+    bh = h * sy
+  }
+  return {
+    position: 'absolute',
+    left,
+    top,
+    width: Math.max(bw, 1),
+    height: Math.max(bh, 1),
+    border: '2px solid #ffeb3b',
+    boxSizing: 'border-box',
+    pointerEvents: 'none',
+  }
+}
+
+const TunnelImageWithBoxes: React.FC<{
+  imageUrl: string
+  alt: string
+  boxes: Array<Record<string, number>>
+}> = ({ imageUrl, alt, boxes }) => {
+  const [dims, setDims] = useState({ nw: 0, nh: 0, dw: 0, dh: 0 })
+  const onImgLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget
+    setDims({
+      nw: img.naturalWidth,
+      nh: img.naturalHeight,
+      dw: img.offsetWidth,
+      dh: img.offsetHeight,
+    })
+  }
+  return (
+    <div style={{ position: 'relative', width: '100%', lineHeight: 0 }}>
+      <img
+        src={imageUrl}
+        alt={alt}
+        style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 8, marginBottom: 8 }}
+        onLoad={onImgLoad}
+      />
+      {dims.dw > 0 &&
+        boxes.map((box, i) => (
+          <div key={i} style={bboxOverlayStyle(box, dims.nw, dims.nh, dims.dw, dims.dh)} />
+        ))}
+    </div>
+  )
+}
 
 interface DamageReport {
   id: string
@@ -50,6 +125,10 @@ const AdminDamageDetectionPage: React.FC = () => {
   const [tunnelError, setTunnelError] = useState('')
   const [tunnelDetail, setTunnelDetail] = useState<TunnelEventDetailResponse | null>(null)
   const [tunnelDetailLoading, setTunnelDetailLoading] = useState(false)
+  const [qcNotes, setQcNotes] = useState('')
+  const [qcReviewer, setQcReviewer] = useState('')
+  const [qcSubmitting, setQcSubmitting] = useState(false)
+  const [qcError, setQcError] = useState('')
 
   const loadTunnelEvents = useCallback(async () => {
     setTunnelLoading(true)
@@ -67,15 +146,37 @@ const AdminDamageDetectionPage: React.FC = () => {
   const loadTunnelDetail = useCallback(async (eventId: string) => {
     setTunnelDetailLoading(true)
     setTunnelDetail(null)
+    setQcError('')
     try {
       const data = await fetchTunnelEventDetail(eventId)
       setTunnelDetail(data)
+      setQcNotes(data.qc?.notes ?? '')
+      setQcReviewer(data.qc?.reviewer_id ?? '')
     } catch (err: unknown) {
       setTunnelError(err instanceof Error ? err.message : 'Failed to load event detail')
     } finally {
       setTunnelDetailLoading(false)
     }
   }, [])
+
+  const submitQc = async (status: 'approved' | 'rejected') => {
+    if (!tunnelDetail) return
+    setQcSubmitting(true)
+    setQcError('')
+    try {
+      await submitTunnelEventQc(tunnelDetail.event_id, {
+        status,
+        notes: qcNotes,
+        reviewer_id: qcReviewer || undefined,
+      })
+      await loadTunnelDetail(tunnelDetail.event_id)
+      await loadTunnelEvents()
+    } catch (e: unknown) {
+      setQcError(e instanceof Error ? e.message : 'QC submit failed')
+    } finally {
+      setQcSubmitting(false)
+    }
+  }
 
   useEffect(() => {
     if (activeTab === 'tunnel-scans' && isTunnelReviewConfigured()) {
@@ -280,11 +381,79 @@ const AdminDamageDetectionPage: React.FC = () => {
                 <h2>Event {tunnelDetail.event_id}</h2>
                 <p>{tunnelDetail.total_cameras} camera(s) &middot; {tunnelDetail.any_damage ? 'Damage detected' : 'No damage'}</p>
 
+                <div
+                  className="tunnel-qc-panel"
+                  style={{
+                    marginTop: 16,
+                    padding: 16,
+                    background: '#f9f9f9',
+                    borderRadius: 8,
+                    border: '1px solid #eee',
+                  }}
+                >
+                  <h3 style={{ marginTop: 0 }}>QC review</h3>
+                  <p style={{ fontSize: 14, color: '#666' }}>
+                    Status:{' '}
+                    <strong>
+                      {tunnelDetail.qc?.status ?? 'pending'}
+                    </strong>
+                    {tunnelDetail.qc?.updated_at && (
+                      <span style={{ marginLeft: 8, fontSize: 13 }}>
+                        ({new Date(tunnelDetail.qc.updated_at).toLocaleString()})
+                      </span>
+                    )}
+                  </p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+                    <label style={{ flex: '1 1 200px' }}>
+                      Notes
+                      <textarea
+                        value={qcNotes}
+                        onChange={(e) => setQcNotes(e.target.value)}
+                        rows={2}
+                        style={{ width: '100%', marginTop: 4, padding: 8, borderRadius: 6, border: '1px solid #ccc' }}
+                      />
+                    </label>
+                    <label style={{ flex: '1 1 160px' }}>
+                      Reviewer ID
+                      <input
+                        value={qcReviewer}
+                        onChange={(e) => setQcReviewer(e.target.value)}
+                        placeholder="optional"
+                        style={{ width: '100%', marginTop: 4, padding: 8, borderRadius: 6, border: '1px solid #ccc' }}
+                      />
+                    </label>
+                  </div>
+                  {qcError && (
+                    <p style={{ color: '#c62828', fontSize: 14 }} role="alert">
+                      {qcError}
+                    </p>
+                  )}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="btn-small btn-primary"
+                      disabled={qcSubmitting}
+                      onClick={() => submitQc('approved')}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-small btn-outline"
+                      style={{ color: '#c62828', borderColor: '#c62828' }}
+                      disabled={qcSubmitting}
+                      onClick={() => submitQc('rejected')}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+
                 <div className="tunnel-cameras-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:16,marginTop:16}}>
                   {tunnelDetail.cameras.map((cam) => (
                     <div key={cam.camera_frame} className="report-card" style={{padding:16}}>
                       {cam.image_url && (
-                        <img src={cam.image_url} alt={cam.camera_id} style={{width:'100%',borderRadius:8,marginBottom:8}} />
+                        <TunnelImageWithBoxes imageUrl={cam.image_url} alt={cam.camera_id} boxes={cam.bounding_boxes} />
                       )}
                       <h4>{cam.camera_id} / {cam.frame}</h4>
                       <p style={{margin:'4px 0'}}>
@@ -315,6 +484,7 @@ const AdminDamageDetectionPage: React.FC = () => {
                       <th style={{textAlign:'center',padding:'8px 12px',borderBottom:'1px solid #ddd'}}>Cameras</th>
                       <th style={{textAlign:'center',padding:'8px 12px',borderBottom:'1px solid #ddd'}}>Damage</th>
                       <th style={{textAlign:'left',padding:'8px 12px',borderBottom:'1px solid #ddd'}}>Timestamp</th>
+                      <th style={{textAlign:'center',padding:'8px 12px',borderBottom:'1px solid #ddd'}}>QC</th>
                       <th style={{padding:'8px 12px',borderBottom:'1px solid #ddd'}}></th>
                     </tr>
                   </thead>
@@ -330,6 +500,9 @@ const AdminDamageDetectionPage: React.FC = () => {
                           </span>
                         </td>
                         <td style={{padding:'8px 12px',borderBottom:'1px solid #eee',fontSize:13}}>{ev.last_timestamp ? new Date(ev.last_timestamp).toLocaleString() : '—'}</td>
+                        <td style={{padding:'8px 12px',borderBottom:'1px solid #eee',textAlign:'center',fontSize:13}}>
+                          {ev.qc_status || 'pending'}
+                        </td>
                         <td style={{padding:'8px 12px',borderBottom:'1px solid #eee'}}>
                           <button
                             className="btn-small btn-outline"

@@ -14,6 +14,8 @@ export interface TunnelEventSummary {
   any_damage: boolean
   camera_count: number
   preview_image_url: string
+  /** pending | approved | rejected — from optional ``__qc__`` DynamoDB row */
+  qc_status: string
 }
 
 export interface TunnelEventsListResponse {
@@ -35,11 +37,25 @@ export interface TunnelCameraResult {
   timestamp: string
 }
 
+export interface TunnelEventQc {
+  status: string
+  notes: string
+  reviewer_id: string
+  updated_at: string
+}
+
 export interface TunnelEventDetailResponse {
   event_id: string
   cameras: TunnelCameraResult[]
   total_cameras: number
   any_damage: boolean
+  qc: TunnelEventQc | null
+}
+
+export interface TunnelQcPostBody {
+  status: 'approved' | 'rejected' | 'pending'
+  notes?: string
+  reviewer_id?: string
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -57,7 +73,7 @@ export function isTunnelReviewConfigured(): boolean {
   return Boolean(getBaseUrl() && getApiKey())
 }
 
-async function tunnelFetch<T>(path: string): Promise<T> {
+async function tunnelFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const base = getBaseUrl()
   const key = getApiKey()
   if (!base || !key) {
@@ -65,12 +81,15 @@ async function tunnelFetch<T>(path: string): Promise<T> {
       'Tunnel Review API is not configured (set VITE_TUNNEL_REVIEW_API_BASE_URL and VITE_TUNNEL_REVIEW_API_KEY).',
     )
   }
+  const method = init?.method ?? 'GET'
   const res = await fetch(`${base}${path}`, {
-    method: 'GET',
+    method,
     headers: {
       'Content-Type': 'application/json',
       'X-Api-Key': key,
+      ...init?.headers,
     },
+    body: init?.body,
   })
   if (!res.ok) {
     const text = await res.text()
@@ -87,4 +106,18 @@ export async function fetchTunnelEvents(): Promise<TunnelEventsListResponse> {
 
 export async function fetchTunnelEventDetail(eventId: string): Promise<TunnelEventDetailResponse> {
   return tunnelFetch<TunnelEventDetailResponse>(`/tunnel/events/${encodeURIComponent(eventId)}`)
+}
+
+/** POST QC decision for a tunnel event (persists ``__qc__`` row in DynamoDB). */
+export async function submitTunnelEventQc(
+  eventId: string,
+  body: TunnelQcPostBody,
+): Promise<{ event_id: string; qc: TunnelEventQc }> {
+  return tunnelFetch<{ event_id: string; qc: TunnelEventQc }>(
+    `/tunnel/events/${encodeURIComponent(eventId)}/qc`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+  )
 }

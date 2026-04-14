@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { fetchAdminBookings, type AdminBookingRow } from '../../lib/adminApi'
 
 interface Reservation {
   id: string
@@ -32,13 +33,44 @@ interface Reservation {
   createdAt: string
 }
 
+function mapApiBooking(b: AdminBookingRow): Reservation {
+  const pickup = b.rental.startDate?.slice(0, 10) ?? '—'
+  const ret = b.rental.endDate?.slice(0, 10) ?? '—'
+  const st = (b.status || 'pending').toLowerCase() as Reservation['status']
+  return {
+    id: b.id,
+    bookingRef: b.bookingReference ?? b.id,
+    customer: {
+      name: b.customer.name,
+      email: b.customer.email,
+      phone: b.customer.phone ?? '',
+    },
+    vehicle: b.vehicle,
+    dates: {
+      pickup,
+      return: ret,
+      duration: b.rental.totalDays ?? 1,
+    },
+    status: st,
+    pricing: {
+      daily: 0,
+      total: b.pricing.total,
+      paid: b.pricing.total,
+    },
+    location: {
+      pickup: b.rental.pickupLocation ?? '—',
+      return: b.rental.returnLocation ?? '—',
+    },
+    createdAt: b.createdAt ?? '—',
+  }
+}
+
 const AdminReservationsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('all')
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null)
   const [showDetails, setShowDetails] = useState(false)
 
-  // Mock reservations data
-  const mockReservations: Reservation[] = [
+  const MOCK_RESERVATIONS: Reservation[] = [
     {
       id: '1',
       bookingRef: 'BK1722814756432',
@@ -165,6 +197,20 @@ const AdminReservationsPage: React.FC = () => {
     }
   ]
 
+  const [reservations, setReservations] = useState<Reservation[]>(MOCK_RESERVATIONS)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const rows = await fetchAdminBookings()
+      if (cancelled || !rows?.length) return
+      setReservations(rows.map(mapApiBooking))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'confirmed': return '#4caf50'
@@ -189,8 +235,8 @@ const AdminReservationsPage: React.FC = () => {
   }
 
   const filterReservations = () => {
-    if (activeTab === 'all') return mockReservations
-    return mockReservations.filter(reservation => reservation.status === activeTab)
+    if (activeTab === 'all') return reservations
+    return reservations.filter(reservation => reservation.status === activeTab)
   }
 
   const handleStatusChange = (_reservationId: string, newStatus: string) => {
@@ -242,31 +288,31 @@ const AdminReservationsPage: React.FC = () => {
             className={`tab ${activeTab === 'all' ? 'active' : ''}`}
             onClick={() => setActiveTab('all')}
           >
-            All ({mockReservations.length})
+            All ({reservations.length})
           </button>
           <button 
             className={`tab ${activeTab === 'pending' ? 'active' : ''}`}
             onClick={() => setActiveTab('pending')}
           >
-            Pending ({mockReservations.filter(r => r.status === 'pending').length})
+            Pending ({reservations.filter(r => r.status === 'pending').length})
           </button>
           <button 
             className={`tab ${activeTab === 'confirmed' ? 'active' : ''}`}
             onClick={() => setActiveTab('confirmed')}
           >
-            Confirmed ({mockReservations.filter(r => r.status === 'confirmed').length})
+            Confirmed ({reservations.filter(r => r.status === 'confirmed').length})
           </button>
           <button 
             className={`tab ${activeTab === 'active' ? 'active' : ''}`}
             onClick={() => setActiveTab('active')}
           >
-            Active ({mockReservations.filter(r => r.status === 'active').length})
+            Active ({reservations.filter(r => r.status === 'active').length})
           </button>
           <button 
             className={`tab ${activeTab === 'completed' ? 'active' : ''}`}
             onClick={() => setActiveTab('completed')}
           >
-            Completed ({mockReservations.filter(r => r.status === 'completed').length})
+            Completed ({reservations.filter(r => r.status === 'completed').length})
           </button>
         </div>
 

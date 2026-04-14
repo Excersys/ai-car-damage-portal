@@ -17,7 +17,23 @@ env = cdk.Environment(
     region=app.node.try_get_context("region") or "us-east-1",
 )
 
-storage = StorageStack(app, "TunnelStorage", env=env)
+_grant_sm = app.node.try_get_context("grantSageMakerInvoke")
+if _grant_sm is None:
+    grant_sagemaker_invoke = True
+elif isinstance(_grant_sm, str):
+    grant_sagemaker_invoke = _grant_sm.lower() in ("true", "1", "yes")
+else:
+    grant_sagemaker_invoke = bool(_grant_sm)
+
+onnx_layer_arn = app.node.try_get_context("damageDetectionOnnxLayerArn")
+
+storage = StorageStack(
+    app,
+    "TunnelStorage",
+    env=env,
+    grant_sagemaker_invoke=grant_sagemaker_invoke,
+    onnx_layer_arn=onnx_layer_arn,
+)
 
 api = ApiStack(
     app,

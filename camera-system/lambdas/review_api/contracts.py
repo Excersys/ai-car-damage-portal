@@ -45,6 +45,7 @@ def validate_event_list_response(body: dict[str, Any]) -> None:
         "any_damage",
         "camera_count",
         "preview_image_url",
+        "qc_status",
     }
     for i, ev in enumerate(body["events"]):
         if not isinstance(ev, dict):
@@ -58,13 +59,16 @@ def validate_event_list_response(body: dict[str, Any]) -> None:
             raise ContractError(f"events[{i}].camera_count must be int")
         if not isinstance(ev["preview_image_url"], str):
             raise ContractError(f"events[{i}].preview_image_url must be str")
+        if not isinstance(ev["qc_status"], str):
+            raise ContractError(f"events[{i}].qc_status must be str")
 
 
 def validate_event_detail_response(body: dict[str, Any]) -> None:
     """
     Contract for GET /tunnel/events/{event_id} (200 JSON body).
+    ``qc`` is null or an object with status, notes, reviewer_id, updated_at.
     """
-    required = {"event_id", "cameras", "total_cameras", "any_damage"}
+    required = {"event_id", "cameras", "total_cameras", "any_damage", "qc"}
     _require_present_keys(body, required, label="detail")
 
     if not isinstance(body["event_id"], str):
@@ -77,6 +81,21 @@ def validate_event_detail_response(body: dict[str, Any]) -> None:
         raise ContractError("detail.any_damage must be bool")
     if body["total_cameras"] != len(body["cameras"]):
         raise ContractError("detail.total_cameras must equal len(cameras)")
+
+    qc = body["qc"]
+    if qc is not None:
+        if not isinstance(qc, dict):
+            raise ContractError("detail.qc must be null or an object")
+        qreq = {"status", "notes", "reviewer_id", "updated_at"}
+        _require_present_keys(qc, qreq, label="detail.qc")
+        if not isinstance(qc["status"], str):
+            raise ContractError("detail.qc.status must be str")
+        if not isinstance(qc["notes"], str):
+            raise ContractError("detail.qc.notes must be str")
+        if not isinstance(qc["reviewer_id"], str):
+            raise ContractError("detail.qc.reviewer_id must be str")
+        if not isinstance(qc["updated_at"], str):
+            raise ContractError("detail.qc.updated_at must be str")
 
     cam_keys = {
         "camera_id",
@@ -99,6 +118,23 @@ def validate_event_detail_response(body: dict[str, Any]) -> None:
             raise ContractError(f"cameras[{i}].confidence_score must be numeric")
         if not isinstance(cam["bounding_boxes"], list):
             raise ContractError(f"cameras[{i}].bounding_boxes must be a list")
+
+
+def validate_qc_post_request(body: dict[str, Any]) -> None:
+    """
+    Contract for POST /tunnel/events/{event_id}/qc JSON body.
+    """
+    if not isinstance(body, dict):
+        raise ContractError("QC POST body must be an object")
+    if "status" not in body:
+        raise ContractError("QC POST must include 'status'")
+    st = body["status"]
+    if st not in ("approved", "rejected", "pending"):
+        raise ContractError("QC POST status must be approved, rejected, or pending")
+    if "notes" in body and not isinstance(body["notes"], str):
+        raise ContractError("QC POST notes must be str when present")
+    if "reviewer_id" in body and not isinstance(body["reviewer_id"], str):
+        raise ContractError("QC POST reviewer_id must be str when present")
 
 
 def validate_inference_response(body: dict[str, Any]) -> None:

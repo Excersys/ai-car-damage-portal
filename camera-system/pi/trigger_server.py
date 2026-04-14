@@ -133,6 +133,45 @@ class CameraItem(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Plate reading helper
+# ---------------------------------------------------------------------------
+
+
+def _try_read_plate(captures: list[CaptureResult]) -> str:
+    """Attempt to read license plate from the first successful capture frame."""
+    try:
+        from plate_reader import read_plate
+    except ImportError:
+        logger.debug("plate_reader not available, skipping LPR")
+        return "unknown"
+
+    for cap in captures:
+        if not cap.success or not cap.local_path.exists():
+            logger.info("Skipping %s for plate read (success=%s, exists=%s)",
+                        cap.camera_id, cap.success,
+                        cap.local_path.exists() if cap.local_path else False)
+            continue
+        try:
+            import cv2
+            image = cv2.imread(str(cap.local_path))
+            if image is None:
+                logger.warning("Could not read image for plate: %s", cap.local_path)
+                continue
+            logger.info("Attempting plate read on %s (%dx%d)",
+                        cap.camera_id, image.shape[1], image.shape[0])
+            result = read_plate(image)
+            logger.info("Plate read result from %s: '%s'", cap.camera_id, result)
+            if result and result != "unknown":
+                return result
+        except Exception as exc:
+            logger.warning("Plate read failed for %s: %s", cap.camera_id, exc)
+            continue
+
+    logger.info("No plate detected from any camera")
+    return "unknown"
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -153,7 +192,12 @@ async def trigger(payload: TriggerPayload):
     captures: list[CaptureResult] = capture_all(event_id)
     captured_count = sum(1 for c in captures if c.success)
 
-    s3_results = upload_event(event_id, captures, plate=payload.get_plate())
+    # Auto-read license plate from captured frames if not provided
+    plate = payload.get_plate()
+    if plate == "unknown" and captured_count > 0:
+        plate = _try_read_plate(captures)
+
+    s3_results = upload_event(event_id, captures, plate=plate)
     uploaded_ids = {r.camera_id for r in s3_results if r.success}
     failed_results = [r for r in s3_results if not r.success]
 

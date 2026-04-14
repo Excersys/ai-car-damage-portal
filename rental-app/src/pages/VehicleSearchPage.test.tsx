@@ -3,35 +3,40 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import VehicleSearchPage from './VehicleSearchPage'
 
-// Mock axios which VehicleSearch uses directly
-vi.mock('axios', () => ({
-  default: {
-    get: vi.fn().mockRejectedValue(new Error('not configured')),
-    post: vi.fn(),
-    create: vi.fn(() => ({
-      get: vi.fn(),
-      post: vi.fn(),
-      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
-    })),
+import userEvent from '@testing-library/user-event'
+
+let capturedOnSelect: any = null
+vi.mock('../components/VehicleSearch', () => ({
+  default: ({ onVehicleSelect }: any) => {
+    capturedOnSelect = onVehicleSelect
+    return <div data-testid="vehicle-search">VehicleSearch Mock <button onClick={() => onVehicleSelect({ id: '42' })}>Select</button></div>
   },
 }))
 
+const mockNavigate = vi.fn()
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom')
+  return { ...actual, useNavigate: () => mockNavigate }
+})
+
 describe('VehicleSearchPage', () => {
-  it('renders without crashing', () => {
+  it('renders VehicleSearch component', () => {
     render(
       <MemoryRouter>
         <VehicleSearchPage />
       </MemoryRouter>
     )
-    expect(screen.getByText('Find Your Perfect Rental')).toBeInTheDocument()
+    expect(screen.getByTestId('vehicle-search')).toBeInTheDocument()
   })
 
-  it('renders the VehicleSearch component', () => {
+  it('navigates to vehicle detail when onVehicleSelect fires', async () => {
+    const user = userEvent.setup()
     render(
       <MemoryRouter>
         <VehicleSearchPage />
       </MemoryRouter>
     )
-    expect(screen.getByText(/Choose from our premium fleet/)).toBeInTheDocument()
+    await user.click(screen.getByText('Select'))
+    expect(mockNavigate).toHaveBeenCalledWith('/vehicles/42')
   })
 })

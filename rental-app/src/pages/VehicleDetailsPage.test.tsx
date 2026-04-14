@@ -32,4 +32,15 @@ describe('VehicleDetailsPage', () => {
   it('exports a valid React component', () => {
     expect(typeof VehicleDetailsPage).toBe('function')
   })
+
+  it('shows "Vehicle not found" when vehicleId param is missing', () => {
+    render(
+      <MemoryRouter initialEntries={['/vehicles/']}>
+        <Routes>
+          <Route path="/vehicles/" element={<VehicleDetailsPage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    expect(screen.getByText('Vehicle not found')).toBeInTheDocument()
+  })
 })

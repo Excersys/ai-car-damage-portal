@@ -117,4 +117,61 @@ describe('HomePage', () => {
 
     expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('dropoff=SFO'))
   })
+
+  it('changes pickup time select', () => {
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>
+    )
+    const pickupTime = screen.getByLabelText('Pick-up Time') as HTMLSelectElement
+    fireEvent.change(pickupTime, { target: { value: '14:00' } })
+    expect(pickupTime.value).toBe('14:00')
+  })
+
+  it('changes dropoff time select', () => {
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>
+    )
+    const dropoffTime = screen.getByLabelText('Drop-off Time') as HTMLSelectElement
+    fireEvent.change(dropoffTime, { target: { value: '16:00' } })
+    expect(dropoffTime.value).toBe('16:00')
+  })
+
+  it('navigates with custom dropoff when changed from "Same as pickup"', () => {
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>
+    )
+    fireEvent.change(screen.getByLabelText('Pick-up Location'), { target: { value: 'SFO' } })
+    fireEvent.change(screen.getByLabelText('Drop-off Location'), { target: { value: 'LAX' } })
+    fireEvent.change(screen.getByLabelText('Pick-up Date'), { target: { value: '2026-05-01' } })
+    fireEvent.change(screen.getByLabelText('Drop-off Date'), { target: { value: '2026-05-05' } })
+
+    fireEvent.click(screen.getByText('Find Cars'))
+
+    expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('dropoff=LAX'))
+  })
+
+  it('includes pickupTime and dropoffTime in navigation params', () => {
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>
+    )
+    fireEvent.change(screen.getByLabelText('Pick-up Location'), { target: { value: 'SFO' } })
+    fireEvent.change(screen.getByLabelText('Drop-off Location'), { target: { value: 'LAX' } })
+    fireEvent.change(screen.getByLabelText('Pick-up Date'), { target: { value: '2026-05-01' } })
+    fireEvent.change(screen.getByLabelText('Drop-off Date'), { target: { value: '2026-05-05' } })
+    fireEvent.change(screen.getByLabelText('Pick-up Time'), { target: { value: '11:00' } })
+    fireEvent.change(screen.getByLabelText('Drop-off Time'), { target: { value: '15:00' } })
+
+    fireEvent.click(screen.getByText('Find Cars'))
+
+    expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('pickupTime=11'))
+    expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('dropoffTime=15'))
+  })
 })

@@ -1,11 +1,55 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  isTunnelReviewConfigured,
+  fetchTunnelEvents,
+  type TunnelEventSummary,
+} from '../lib/tunnelReviewApi'
+
+interface DamageResult {
+  type: string
+  location: string
+  severity: string
+  confidence: number
+  estimatedCost: number
+}
+
+interface AnalysisResults {
+  overallCondition: string
+  confidenceScore: number
+  damageDetected: DamageResult[]
+  totalEstimatedCost: number
+  recommendedAction: string
+}
+
+const MOCK_RESULTS: AnalysisResults = {
+  overallCondition: 'Good',
+  confidenceScore: 92,
+  damageDetected: [
+    { type: 'Minor Scratch', location: 'Front Bumper', severity: 'Low', confidence: 85, estimatedCost: 150 },
+    { type: 'Small Dent', location: 'Rear Door', severity: 'Medium', confidence: 78, estimatedCost: 300 },
+  ],
+  totalEstimatedCost: 450,
+  recommendedAction: 'Document and proceed with rental',
+}
 
 const DamageDetectionPage: React.FC = () => {
+  const navigate = useNavigate()
   const [selectedImages, setSelectedImages] = useState<File[]>([])
   const [, setIsAnalyzing] = useState(false)
-  const [analysisResults, setAnalysisResults] = useState<any>(null)
+  const [analysisResults, setAnalysisResults] = useState<AnalysisResults | null>(null)
   const [currentStep, setCurrentStep] = useState<'upload' | 'analyzing' | 'results'>('upload')
+  const [recentEvents, setRecentEvents] = useState<TunnelEventSummary[]>([])
+  const [reportSaved, setReportSaved] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (isTunnelReviewConfigured()) {
+      fetchTunnelEvents()
+        .then((resp) => setRecentEvents(resp.events.slice(0, 5)))
+        .catch(() => {})
+    }
+  }, [])
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
@@ -13,41 +57,18 @@ const DamageDetectionPage: React.FC = () => {
   }
 
   const removeImage = (index: number) => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index))
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index))
   }
 
   const startAnalysis = async () => {
     if (selectedImages.length === 0) return
-    
+
     setCurrentStep('analyzing')
     setIsAnalyzing(true)
-    
-    // Simulate AI analysis
+
+    // Simulate analysis — in production this would POST images to the camera-system pipeline
     setTimeout(() => {
-      const mockResults = {
-        overallCondition: 'Good',
-        confidenceScore: 92,
-        damageDetected: [
-          {
-            type: 'Minor Scratch',
-            location: 'Front Bumper',
-            severity: 'Low',
-            confidence: 85,
-            estimatedCost: 150
-          },
-          {
-            type: 'Small Dent',
-            location: 'Rear Door',
-            severity: 'Medium',
-            confidence: 78,
-            estimatedCost: 300
-          }
-        ],
-        totalEstimatedCost: 450,
-        recommendedAction: 'Document and proceed with rental'
-      }
-      
-      setAnalysisResults(mockResults)
+      setAnalysisResults(MOCK_RESULTS)
       setCurrentStep('results')
       setIsAnalyzing(false)
     }, 3000)
@@ -58,15 +79,54 @@ const DamageDetectionPage: React.FC = () => {
     setAnalysisResults(null)
     setCurrentStep('upload')
     setIsAnalyzing(false)
+    setReportSaved(false)
+  }
+
+  const handleSaveReport = () => {
+    setReportSaved(true)
   }
 
   return (
     <div className="damage-detection-page">
       <div className="container">
         <div className="page-header">
-          <h1>🤖 AI Damage Detection</h1>
+          <h1>AI Damage Detection</h1>
           <p>Upload vehicle photos for intelligent damage assessment</p>
         </div>
+
+        {/* Recent tunnel events sidebar */}
+        {recentEvents.length > 0 && currentStep === 'upload' && (
+          <div style={{ marginBottom: '2rem', padding: '1rem', background: '#f0fdf4', borderRadius: '0.5rem', border: '1px solid #bbf7d0' }}>
+            <h3 style={{ fontSize: '0.875rem', fontWeight: 600, color: '#166534', marginBottom: '0.75rem' }}>
+              Recent Tunnel Scans
+            </h3>
+            <div style={{ display: 'flex', gap: '0.75rem', overflowX: 'auto' }}>
+              {recentEvents.map((ev) => (
+                <div
+                  key={ev.event_id}
+                  style={{
+                    flex: '0 0 auto',
+                    padding: '0.5rem 0.75rem',
+                    background: 'white',
+                    borderRadius: '0.375rem',
+                    border: '1px solid #d1d5db',
+                    fontSize: '0.75rem',
+                    minWidth: '140px',
+                  }}
+                >
+                  <div style={{ fontWeight: 600 }}>{ev.license_plate || ev.event_id}</div>
+                  <div style={{ color: '#6b7280' }}>
+                    {new Date(ev.last_timestamp).toLocaleDateString()}
+                  </div>
+                  <div style={{ color: ev.any_damage ? '#dc2626' : '#16a34a', fontWeight: 500 }}>
+                    {ev.any_damage ? 'Damage detected' : 'Clean'}
+                  </div>
+                  <div style={{ color: '#6b7280' }}>QC: {ev.qc_status}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {currentStep === 'upload' && (
           <div className="upload-section">
@@ -89,11 +149,8 @@ const DamageDetectionPage: React.FC = () => {
                 accept="image/*"
                 style={{ display: 'none' }}
               />
-              
-              <div 
-                className="upload-dropzone"
-                onClick={() => fileInputRef.current?.click()}
-              >
+
+              <div className="upload-dropzone" onClick={() => fileInputRef.current?.click()}>
                 <div className="upload-icon">📸</div>
                 <h3>Click to upload photos</h3>
                 <p>Or drag and drop images here</p>
@@ -107,23 +164,17 @@ const DamageDetectionPage: React.FC = () => {
                 <div className="image-preview-grid">
                   {selectedImages.map((file, index) => (
                     <div key={index} className="image-preview-item">
-                      <img 
-                        src={URL.createObjectURL(file)} 
-                        alt={`Preview ${index + 1}`}
-                      />
-                      <button 
-                        className="remove-image-btn"
-                        onClick={() => removeImage(index)}
-                      >
+                      <img src={URL.createObjectURL(file)} alt={`Preview ${index + 1}`} />
+                      <button className="remove-image-btn" onClick={() => removeImage(index)}>
                         ✕
                       </button>
                       <div className="image-name">{file.name}</div>
                     </div>
                   ))}
                 </div>
-                
+
                 <div className="analysis-actions">
-                  <button 
+                  <button
                     className="btn btn-primary btn-large"
                     onClick={startAnalysis}
                     disabled={selectedImages.length === 0}
@@ -184,7 +235,7 @@ const DamageDetectionPage: React.FC = () => {
                 <h4>Damage Summary</h4>
                 {analysisResults.damageDetected.length > 0 ? (
                   <div className="damage-list">
-                    {analysisResults.damageDetected.map((damage: any, index: number) => (
+                    {analysisResults.damageDetected.map((damage, index) => (
                       <div key={index} className="damage-item">
                         <div className="damage-info">
                           <h5>{damage.type}</h5>
@@ -193,14 +244,10 @@ const DamageDetectionPage: React.FC = () => {
                             <span className={`severity ${damage.severity.toLowerCase()}`}>
                               {damage.severity} Severity
                             </span>
-                            <span className="confidence">
-                              {damage.confidence}% confidence
-                            </span>
+                            <span className="confidence">{damage.confidence}% confidence</span>
                           </div>
                         </div>
-                        <div className="damage-cost">
-                          ${damage.estimatedCost}
-                        </div>
+                        <div className="damage-cost">${damage.estimatedCost}</div>
                       </div>
                     ))}
                   </div>
@@ -215,7 +262,7 @@ const DamageDetectionPage: React.FC = () => {
               <div className="cost-breakdown">
                 <h4>Cost Estimate</h4>
                 <div className="cost-details">
-                  {analysisResults.damageDetected.map((damage: any, index: number) => (
+                  {analysisResults.damageDetected.map((damage, index) => (
                     <div key={index} className="cost-item">
                       <span>{damage.type}</span>
                       <span>${damage.estimatedCost}</span>
@@ -238,10 +285,14 @@ const DamageDetectionPage: React.FC = () => {
               <button className="btn btn-secondary" onClick={resetAnalysis}>
                 New Analysis
               </button>
-              <button className="btn btn-primary">
-                Save Report
+              <button
+                className="btn btn-primary"
+                onClick={handleSaveReport}
+                disabled={reportSaved}
+              >
+                {reportSaved ? 'Report Saved' : 'Save Report'}
               </button>
-              <button className="btn btn-primary">
+              <button className="btn btn-primary" onClick={() => navigate('/cars')}>
                 Continue to Booking
               </button>
             </div>

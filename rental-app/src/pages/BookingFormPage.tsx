@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import PaymentForm from '../components/PaymentForm'
 import VeriffVerification from '../components/VeriffVerification'
+import { fetchCarById } from '../lib/vehicleApi'
 
 interface Car {
   id: number
@@ -49,8 +50,8 @@ const BookingFormPage: React.FC = () => {
   
   // Verification state
   const [verificationCompleted, setVerificationCompleted] = useState(false)
-  const [, setVerificationSessionId] = useState<string>('')
-  const [, setVerificationData] = useState<any>(null)
+  const [verificationSessionId, setVerificationSessionId] = useState('')
+  const [, setVerificationData] = useState<unknown>(null)
   
   // Booking details from URL params or state
   const [bookingDetails, setBookingDetails] = useState({
@@ -124,13 +125,27 @@ const BookingFormPage: React.FC = () => {
     { id: 'wifi', name: 'Mobile WiFi Hotspot', price: 10, description: 'High-speed internet for up to 5 devices' }
   ]
 
-  // Load car data if not provided
+  // Load car data from API if not provided via navigation state
   useEffect(() => {
     if (!car && carId) {
-      const foundCar = mockCars[carId]
-      if (foundCar) {
-        setCar(foundCar)
-      }
+      fetchCarById(carId).then((apiCar) => {
+        if (apiCar) {
+          setCar({
+            id: Number(apiCar.id) || 0,
+            make: apiCar.make,
+            model: apiCar.model,
+            year: apiCar.year,
+            price: apiCar.pricePerDay ?? 0,
+            image: apiCar.imageUrl || `https://via.placeholder.com/300x200?text=${apiCar.make}+${apiCar.model}`,
+            location: apiCar.location ?? 'Available',
+            rating: apiCar.rating ?? 4.5,
+            reviews: apiCar.reviews ?? 0,
+          })
+        } else {
+          const fallback = mockCars[carId]
+          if (fallback) setCar(fallback)
+        }
+      })
     }
   }, [carId, car])
 
@@ -649,7 +664,7 @@ const BookingFormPage: React.FC = () => {
                 car={car}
                 pricing={{ total: calculateTotalPrice() }}
                 totalDays={calculateDays()}
-                verificationSessionId="mock-session-id"
+                verificationSessionId={verificationSessionId || 'pending-verification'}
                 onPaymentComplete={handleCompleteBooking}
                 onCancel={handlePreviousStep}
               />

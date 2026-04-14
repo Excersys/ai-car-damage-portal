@@ -45,12 +45,33 @@ table = dynamodb.Table(DYNAMODB_TABLE)
 _onnx_session = None
 
 
+def _extract_s3_items(event: dict) -> list[tuple[str, str]]:
+    """Extract (bucket, key) pairs from S3 direct or EventBridge events."""
+    # Direct S3 notification: {"Records": [{"s3": {"bucket": ..., "object": ...}}]}
+    if "Records" in event:
+        return [
+            (r["s3"]["bucket"]["name"], r["s3"]["object"]["key"])
+            for r in event["Records"]
+        ]
+    # EventBridge: {"detail": {"bucket": {"name": ...}, "object": {"key": ...}}}
+    if "detail" in event:
+        detail = event["detail"]
+        bucket = detail.get("bucket", {}).get("name", "")
+        key = detail.get("object", {}).get("key", "")
+        if bucket and key:
+            return [(bucket, key)]
+    logger.warning("Unrecognized event format: %s", list(event.keys()))
+    return []
+
+
 def lambda_handler(event: dict, context) -> dict:
     """Process S3 ObjectCreated events through the damage detection model."""
-    for record in event.get("Records", []):
-        bucket = record["s3"]["bucket"]["name"]
-        key = record["s3"]["object"]["key"]
+    items = _extract_s3_items(event)
+    if not items:
+        logger.warning("No S3 items extracted from event")
+        return {"statusCode": 200}
 
+    for bucket, key in items:
         if not key.endswith(".jpg"):
             continue
 

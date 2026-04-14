@@ -65,7 +65,7 @@ const AdminDashboard: React.FC = () => {
       setError(null);
 
       // Get authentication token from localStorage or context
-      const token = localStorage.getItem('accessToken');
+      const token = localStorage.getItem('authToken');
       if (!token) {
         throw new Error('No authentication token found');
       }

@@ -80,7 +80,7 @@ export async function getScans(): Promise<ScanEvent[]> {
     SELECT 
       s.id, s.car_id as "carId", s.reservation_id as "reservationId", 
       s.timestamp, s.type, s.ai_status as "aiStatus", 
-      s.qc_status as "qcStatus", s.qc_by as "qcBy", s.qc_notes as "qcNotes",
+      s.qc_status as "qcStatus", s.qc_by as "qcBy", s.qc_notes as "qcNotes", s.qc_reviewed_at as "qcReviewedAt",
       s.image_url_front, s.image_url_rear, s.image_url_left, s.image_url_right
     FROM scans s
     ORDER BY s.timestamp DESC
@@ -109,7 +109,7 @@ export async function getScanById(id: string): Promise<ScanEvent | undefined> {
         SELECT 
         s.id, s.car_id as "carId", s.reservation_id as "reservationId", 
         s.timestamp, s.type, s.ai_status as "aiStatus", 
-        s.qc_status as "qcStatus", s.qc_by as "qcBy", s.qc_notes as "qcNotes",
+        s.qc_status as "qcStatus", s.qc_by as "qcBy", s.qc_notes as "qcNotes", s.qc_reviewed_at as "qcReviewedAt",
         s.image_url_front, s.image_url_rear, s.image_url_left, s.image_url_right
         FROM scans s
         WHERE s.id = $1
@@ -138,7 +138,7 @@ export async function getScansByCarId(carId: string): Promise<ScanEvent[]> {
     SELECT 
       s.id, s.car_id as "carId", s.reservation_id as "reservationId", 
       s.timestamp, s.type, s.ai_status as "aiStatus", 
-      s.qc_status as "qcStatus", s.qc_by as "qcBy", s.qc_notes as "qcNotes",
+      s.qc_status as "qcStatus", s.qc_by as "qcBy", s.qc_notes as "qcNotes", s.qc_reviewed_at as "qcReviewedAt",
       s.image_url_front, s.image_url_rear, s.image_url_left, s.image_url_right
     FROM scans s
     WHERE s.car_id = $1
@@ -163,12 +163,12 @@ export async function getScansByCarId(carId: string): Promise<ScanEvent[]> {
   return scans;
 }
 
-export async function updateQCStatus(scanId: string, status: 'Approved' | 'Rejected', userId: string) {
+export async function updateQCStatus(scanId: string, status: 'Approved' | 'Rejected', reviewerId: string) {
     await query(`
-        UPDATE scans 
-        SET qc_status = $1, qc_by = $2 
+        UPDATE scans
+        SET qc_status = $1, qc_by = $2, qc_reviewed_at = NOW()
         WHERE id = $3
-    `, [status, userId, scanId]);
+    `, [status, reviewerId, scanId]);
     revalidatePath('/qc');
     revalidatePath(`/qc/${scanId}`);
 }
@@ -197,7 +197,7 @@ export async function searchGlobal(queryStr: string) {
     SELECT 
       s.id, s.car_id as "carId", s.reservation_id as "reservationId", 
       s.timestamp, s.type, s.ai_status as "aiStatus", 
-      s.qc_status as "qcStatus", s.qc_by as "qcBy", s.qc_notes as "qcNotes",
+      s.qc_status as "qcStatus", s.qc_by as "qcBy", s.qc_notes as "qcNotes", s.qc_reviewed_at as "qcReviewedAt",
       s.image_url_front, s.image_url_rear, s.image_url_left, s.image_url_right
     FROM scans s
     WHERE s.id::text ILIKE $1 OR s.car_id ILIKE $1

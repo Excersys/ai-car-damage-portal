@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
+import { createVeriffFrame, MESSAGES } from '@veriff/incontext-sdk';
+import { apiClient } from '../config/api';
 
 interface VeriffVerificationProps {
   onVerificationComplete: (success: boolean, sessionId?: string, verificationData?: any) => void;
@@ -78,67 +80,72 @@ const VeriffVerification: React.FC<VeriffVerificationProps> = ({
   });
   const [verificationReport, setVerificationReport] = useState<VerificationReport | null>(null);
 
-  // Create enhanced verification session (Demo Mode)
+  // Create verification session via backend API
   const createVerificationSession = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock successful session creation
+      const response = await apiClient.post('/verification/create-session', {
+        userEmail: _userEmail,
+        carId: _carId,
+        bookingReference: _bookingData?.reservationId,
+        personalInfo,
+      });
+
       const sessionData: VerificationSession = {
-        sessionId: `DEMO_SESSION_${Date.now()}`,
-        url: 'https://demo.veriff.me/verify',
+        sessionId: response.data.sessionId,
+        url: response.data.url || response.data.verificationUrl,
         status: 'created',
-        creditCheckInitiated: true,
-        creditCheckId: `CREDIT_${Date.now()}`
+        creditCheckInitiated: response.data.creditCheckInitiated,
+        creditCheckId: response.data.creditCheckId,
       };
 
       setSession(sessionData);
       setVerificationStatus('identity_verification');
-      
-      // Verification session created successfully - both identity and credit verification required
-      
     } catch (err: any) {
-      setError('Demo mode: Verification session created successfully');
-      console.log('Demo mode: Verification session created');
+      console.error('Error creating verification session:', err);
+      setError(err.response?.data?.error || 'Failed to create verification session. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Start identity verification process
-  const startIdentityVerification = async () => {
-    if (!session) return;
+  // Launch Veriff InContext SDK for identity verification
+  const startIdentityVerification = useCallback(async () => {
+    if (!session?.url) return;
 
     setLoading(true);
     setVerificationStatus('identity_in_progress');
 
     try {
-      // Simulate identity verification delay
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Simulate verification result (90% success rate for demo)
-      const isSuccessful = Math.random() > 0.1;
-      
-      if (isSuccessful) {
-        setVerificationStatus('credit_check');
-      } else {
-        setVerificationStatus('identity_declined');
-        setError('Identity verification failed. Please ensure your documents are clear and try again.');
-      }
-      
+      createVeriffFrame({
+        url: session.url,
+        onEvent: (msg: string) => {
+          switch (msg) {
+            case MESSAGES.FINISHED:
+              setVerificationStatus('credit_check');
+              setLoading(false);
+              break;
+            case MESSAGES.CANCELED:
+              setVerificationStatus('identity_verification');
+              setError('Verification was canceled. Please try again.');
+              setLoading(false);
+              break;
+            default:
+              break;
+          }
+        },
+      });
     } catch (err: any) {
-      setError('Identity verification process failed. Please try again.');
+      console.error('Error launching Veriff SDK:', err);
+      setError('Failed to launch identity verification. Please try again.');
       setVerificationStatus('error');
-    } finally {
       setLoading(false);
     }
-  };
+  }, [session]);
 
-  // Perform enhanced verification with credit check (Demo Mode)
+  // Fetch verification result from backend after identity + credit check
   const performEnhancedVerification = async () => {
     if (!session) return;
 
@@ -146,40 +153,11 @@ const VeriffVerification: React.FC<VeriffVerificationProps> = ({
     setVerificationStatus('processing');
 
     try {
-      // Simulate processing delay
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Mock successful verification report
-      const report: VerificationReport = {
-        sessionId: session.sessionId,
-        verification: {
-          veriff: {
-            status: 'approved',
-            calculatedScore: 95
-          },
-          experian: {
-            creditScore: 750,
-            riskLevel: 'LOW',
-            identityVerified: true,
-            addressVerified: true,
-            calculatedScore: 88
-          }
-        },
-        scoring: {
-          finalScore: 92,
-          riskLevel: 'LOW',
-          recommendation: 'APPROVE',
-          weights: {
-            veriff: 0.6,
-            experian: 0.4
-          }
-        },
-        riskFactors: []
-      };
+      const response = await apiClient.get(`/verification/status/${session.sessionId}`);
+      const report: VerificationReport = response.data.report || response.data;
 
       setVerificationReport(report);
-      
-      // Determine final status based on recommendation
+
       switch (report.scoring.recommendation) {
         case 'APPROVE':
           setVerificationStatus('approved');
@@ -202,11 +180,10 @@ const VeriffVerification: React.FC<VeriffVerificationProps> = ({
         default:
           setVerificationStatus('error');
       }
-      
     } catch (err: any) {
-      setError('Demo mode: Enhanced verification completed successfully');
+      console.error('Error fetching verification status:', err);
+      setError(err.response?.data?.error || 'Failed to retrieve verification results. Please try again.');
       setVerificationStatus('error');
-      console.log('Demo mode: Enhanced verification completed');
     } finally {
       setLoading(false);
     }

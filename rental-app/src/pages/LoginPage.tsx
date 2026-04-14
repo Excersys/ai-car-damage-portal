@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { apiClient } from '../config/api'
 
 const LoginPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true)
@@ -10,6 +11,8 @@ const LoginPage: React.FC = () => {
     lastName: '',
     phone: ''
   })
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -18,9 +21,52 @@ const LoginPage: React.FC = () => {
     })
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: Implement authentication logic
+    setError(null)
+    setLoading(true)
+
+    try {
+      if (!isLogin && formData.password !== formData.confirmPassword) {
+        setError('Passwords do not match')
+        setLoading(false)
+        return
+      }
+
+      if (isLogin) {
+        const response = await apiClient.post('/auth/login', {
+          email: formData.email,
+          password: formData.password,
+        })
+        const { accessToken } = response.data
+        localStorage.setItem('authToken', accessToken)
+        window.location.href = '/'
+      } else {
+        const response = await apiClient.post('/auth/register', {
+          email: formData.email,
+          password: formData.password,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          phone: formData.phone,
+        })
+        const { accessToken } = response.data
+        if (accessToken) {
+          localStorage.setItem('authToken', accessToken)
+        }
+        // After registration, switch to login view
+        setIsLogin(true)
+      }
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response: { data: { error?: string } } }).response?.data?.error
+          : err instanceof Error
+            ? err.message
+            : 'An unexpected error occurred'
+      setError(message || 'An unexpected error occurred')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -32,6 +78,8 @@ const LoginPage: React.FC = () => {
               <h2>{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
               <p>{isLogin ? 'Sign in to your account' : 'Join EZ Car Rental today'}</p>
             </div>
+
+            {error && <div className="auth-error" role="alert">{error}</div>}
 
             <form onSubmit={handleSubmit} className="auth-form">
               {!isLogin && (
@@ -106,8 +154,8 @@ const LoginPage: React.FC = () => {
                 </div>
               )}
 
-              <button type="submit" className="btn btn-primary btn-full">
-                {isLogin ? 'Sign In' : 'Create Account'}
+              <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
+                {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
               </button>
             </form>
 

@@ -43,6 +43,7 @@ CREATE TABLE scans (
     qc_status VARCHAR(50) DEFAULT 'Pending',
     qc_by VARCHAR(255),
     qc_notes TEXT,
+    qc_reviewed_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -58,3 +59,6 @@ CREATE TABLE detected_damage (
     height INT NOT NULL,
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Migration: ACR-137 — Add qc_reviewed_at to scans table
+-- ALTER TABLE scans ADD COLUMN qc_reviewed_at TIMESTAMP;

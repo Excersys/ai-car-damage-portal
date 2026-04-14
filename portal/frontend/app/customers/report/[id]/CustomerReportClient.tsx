@@ -11,6 +11,13 @@ interface CustomerReportClientProps {
 
 export default function CustomerReportClient({ scan, car }: CustomerReportClientProps) {
   const [activeTab, setActiveTab] = useState<'evidence' | 'cost'>('evidence');
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [disputed, setDisputed] = useState(false);
+
+  const estimatedCost = (scan.detectedDamage ?? []).reduce((total, d) => {
+    const baseCost = d.label?.toLowerCase().includes("dent") ? 300 : 150;
+    return total + Math.round(baseCost * (d.confidence ?? 0.8));
+  }, 0);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -100,7 +107,7 @@ export default function CustomerReportClient({ scan, car }: CustomerReportClient
                     <div className="text-center py-8 space-y-4">
                         <CreditCard className="h-12 w-12 text-gray-400 mx-auto" />
                         <h3 className="text-lg font-medium text-gray-900">Estimated Repair Cost</h3>
-                        <p className="text-3xl font-bold text-gray-900">$450.00</p>
+                        <p className="text-3xl font-bold text-gray-900">${estimatedCost > 0 ? estimatedCost.toFixed(2) : "—"}</p>
                         <p className="text-sm text-gray-500 max-w-sm mx-auto">
                             This includes parts, labor, and administrative fees. A detailed invoice will be sent to your email.
                         </p>
@@ -110,15 +117,31 @@ export default function CustomerReportClient({ scan, car }: CustomerReportClient
         </div>
 
         {/* Actions */}
-        <div className="flex gap-4">
-            <button className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition-colors">
-                Acknowledge & Pay
+        {acknowledged ? (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center text-green-800 font-medium">
+            Acknowledged. A payment link will be sent to your email.
+          </div>
+        ) : disputed ? (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center text-yellow-800 font-medium">
+            Dispute submitted. Our team will review and contact you within 48 hours.
+          </div>
+        ) : (
+          <div className="flex gap-4">
+            <button
+              onClick={() => setAcknowledged(true)}
+              className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+            >
+              Acknowledge & Pay
             </button>
-            <button className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
-                <MessageSquare className="h-4 w-4" />
-                Dispute Claim
+            <button
+              onClick={() => setDisputed(true)}
+              className="flex-1 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <MessageSquare className="h-4 w-4" />
+              Dispute Claim
             </button>
-        </div>
+          </div>
+        )}
       </main>
     </div>
   );

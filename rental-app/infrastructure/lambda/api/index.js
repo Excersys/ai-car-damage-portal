@@ -4,10 +4,45 @@ const stripe = require('stripe');
 const jwt = require('jsonwebtoken');
 const jwkToPem = require('jwk-to-pem');
 
+const { Pool } = require('pg');
+
 // Initialize AWS services
 const secretsManager = new AWS.SecretsManager();
 const s3 = new AWS.S3();
 const cognito = new AWS.CognitoIdentityServiceProvider();
+
+// ── Database helper ──────────────────────────────────────────────────
+let _dbPool = null;
+
+async function getDbPool() {
+  if (_dbPool) return _dbPool;
+  if (!DATABASE_SECRET_ARN) return null;
+  try {
+    const secret = await secretsManager.getSecretValue({ SecretId: DATABASE_SECRET_ARN }).promise();
+    const creds = JSON.parse(secret.SecretString);
+    _dbPool = new Pool({
+      host: creds.host,
+      port: creds.port || 5432,
+      database: creds.dbname || 'ezcarrental',
+      user: creds.username,
+      password: creds.password,
+      ssl: { rejectUnauthorized: false },
+      max: 3,
+      idleTimeoutMillis: 60000,
+    });
+    return _dbPool;
+  } catch (err) {
+    console.warn('DB connection failed, falling back to mock data:', err.message);
+    return null;
+  }
+}
+
+async function dbQuery(sql, params = []) {
+  const pool = await getDbPool();
+  if (!pool) return null;
+  const res = await pool.query(sql, params);
+  return res.rows;
+}
 
 // Environment variables
 const {
@@ -630,87 +665,84 @@ const handlers = {
 
   // Cars routes
   'GET /cars': async () => {
-    // Mock data for now - will be replaced with database queries
-    const mockCars = [
-      {
-        id: '1',
-        make: 'Toyota',
-        model: 'Camry',
-        year: 2023,
-        type: 'Sedan',
-        pricePerDay: 49.99,
-        available: true,
-        features: ['Air Conditioning', 'Bluetooth', 'Backup Camera'],
-        imageUrl: `https://${IMAGES_BUCKET_NAME}.s3.amazonaws.com/cars/camry-2023.jpg`
-      },
-      {
-        id: '2',
-        make: 'Honda',
-        model: 'CR-V',
-        year: 2023,
-        type: 'SUV',
-        pricePerDay: 59.99,
-        available: true,
-        features: ['AWD', 'Sunroof', 'Apple CarPlay', 'Safety Sense'],
-        imageUrl: `https://${IMAGES_BUCKET_NAME}.s3.amazonaws.com/cars/crv-2023.jpg`
-      }
-    ];
-
+    const rows = await dbQuery(
+      `SELECT id, make, model, year, color, license_plate, vin, status, image_url, mileage
+       FROM cars WHERE status != 'Retired' ORDER BY make, model`
+    );
+    if (rows) {
+      const cars = rows.map(r => ({
+        id: r.id, make: r.make, model: r.model, year: r.year,
+        type: r.color || 'Sedan', pricePerDay: 49.99, available: r.status === 'Available',
+        features: [], imageUrl: r.image_url || ''
+      }));
+      return createResponse(200, { cars, total: cars.length });
+    }
+    // Fallback mock data when DB is not configured
     return createResponse(200, {
-      cars: mockCars,
-      total: mockCars.length
+      cars: [
+        { id: '1', make: 'Toyota', model: 'Camry', year: 2023, type: 'Sedan', pricePerDay: 49.99, available: true, features: ['Air Conditioning', 'Bluetooth', 'Backup Camera'] },
+        { id: '2', make: 'Honda', model: 'CR-V', year: 2023, type: 'SUV', pricePerDay: 59.99, available: true, features: ['AWD', 'Sunroof', 'Apple CarPlay'] }
+      ],
+      total: 2
     });
   },
 
   'POST /cars': async (event) => {
-    // Admin only - car creation
     const body = JSON.parse(event.body || '{}');
-    console.log('Creating car:', body);
-    
-    // Mock response - will be replaced with database operations
-    return createResponse(201, {
-      message: 'Car created successfully',
-      carId: `car_${Date.now()}`,
-      ...body
-    });
+    const row = await dbQuery(
+      `INSERT INTO cars (id, make, model, year, color, license_plate, vin, status, image_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+      [`car_${Date.now()}`, body.make, body.model, body.year, body.color || '',
+       body.licensePlate || '', body.vin || '', 'Available', body.imageUrl || '']
+    );
+    const carId = row?.[0]?.id || `car_${Date.now()}`;
+    return createResponse(201, { message: 'Car created successfully', carId, ...body });
   },
 
   'GET /cars/{carId}': async (event) => {
     const carId = event.pathParameters?.carId;
-    
-    // Mock response - will be replaced with database query
-    return createResponse(200, {
-      id: carId,
-      make: 'Toyota',
-      model: 'Camry',
-      year: 2023,
-      type: 'Sedan',
-      pricePerDay: 49.99,
-      available: true,
-      features: ['Air Conditioning', 'Bluetooth', 'Backup Camera'],
-      imageUrl: `https://${IMAGES_BUCKET_NAME}.s3.amazonaws.com/cars/camry-2023.jpg`
-    });
+    const rows = await dbQuery(`SELECT * FROM cars WHERE id = $1`, [carId]);
+    if (rows && rows.length > 0) {
+      const r = rows[0];
+      return createResponse(200, {
+        id: r.id, make: r.make, model: r.model, year: r.year, type: r.color || 'Sedan',
+        pricePerDay: 49.99, available: r.status === 'Available', features: [],
+        imageUrl: r.image_url || '', description: `${r.make} ${r.model} ${r.year}`,
+        location: 'Available', rating: 4.5, reviews: 0,
+        specs: { transmission: 'Automatic', fuelType: r.color || 'Gasoline', seats: 5, doors: 4 }
+      });
+    }
+    return createResponse(404, { error: 'Car not found' });
   },
 
   // Bookings routes
   'GET /bookings': async () => {
-    // Mock data - will be replaced with database queries
-    return createResponse(200, {
-      bookings: [],
-      total: 0
-    });
+    const rows = await dbQuery(
+      `SELECT r.id, r.car_id, r.user_id, r.user_name, r.start_date, r.end_date, r.status,
+              c.make, c.model
+       FROM reservations r LEFT JOIN cars c ON r.car_id = c.id
+       ORDER BY r.created_at DESC`
+    );
+    if (rows) {
+      const bookings = rows.map(r => ({
+        id: r.id, carId: r.car_id, vehicleName: r.make ? `${r.make} ${r.model}` : r.car_id,
+        startDate: r.start_date, endDate: r.end_date, status: r.status
+      }));
+      return createResponse(200, { bookings, total: bookings.length });
+    }
+    return createResponse(200, { bookings: [], total: 0 });
   },
 
   'POST /bookings': async (event) => {
     const body = JSON.parse(event.body || '{}');
-    console.log('Creating booking:', body);
-    
-    // Mock response - will be replaced with database operations
-    return createResponse(201, {
-      message: 'Booking created successfully',
-      bookingId: `booking_${Date.now()}`,
-      ...body
-    });
+    const bookingId = `booking_${Date.now()}`;
+    await dbQuery(
+      `INSERT INTO reservations (id, car_id, user_id, user_name, start_date, end_date, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [bookingId, body.carId, body.userId || 'anonymous', body.userName || 'Guest',
+       body.startDate, body.endDate, 'Active']
+    );
+    return createResponse(201, { message: 'Booking created successfully', bookingId, ...body });
   },
 
   // Verification endpoints (Enhanced with Experian integration)

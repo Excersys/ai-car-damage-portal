@@ -41,12 +41,13 @@ export default async function CustomersPage() {
                     </div>
                     <div className="flex items-center text-sm text-gray-500 gap-3">
                       <span className="flex items-center gap-1">
-                        <Mail className="h-3 w-3" /> {user.userId}@example.com
+                        <Mail className="h-3 w-3" /> <span className="text-gray-400 italic">Not on file</span>
                       </span>
                       <span className="flex items-center gap-1">
-                        <Phone className="h-3 w-3" /> +1 (555) 000-0000
+                        <Phone className="h-3 w-3" /> <span className="text-gray-400 italic">Not on file</span>
                       </span>
                     </div>
+                    <p className="text-xs text-gray-400 mt-1">ID: {user.userId}</p>
                   </div>
                 </div>
                 <div>

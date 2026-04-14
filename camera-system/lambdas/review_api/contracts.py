@@ -101,6 +101,37 @@ def validate_event_detail_response(body: dict[str, Any]) -> None:
             raise ContractError(f"cameras[{i}].bounding_boxes must be a list")
 
 
+def validate_inference_response(body: dict[str, Any]) -> None:
+    """
+    Contract for the JSON body returned by the damage-detection model
+    (SageMaker endpoint or Lambda-native ONNX).
+
+    Required fields:
+      confidence: float in [0, 1]
+    Optional fields (handler uses defaults when absent):
+      damage_type: str
+      bounding_boxes: list of dicts with x, y, w, h
+    """
+    if not isinstance(body, dict):
+        raise ContractError("inference response must be an object")
+    if "confidence" not in body:
+        raise ContractError("inference response must include 'confidence'")
+    conf = body["confidence"]
+    if not isinstance(conf, (int, float)):
+        raise ContractError("inference confidence must be numeric")
+    if not (0 <= conf <= 1):
+        raise ContractError(f"inference confidence must be in [0, 1], got {conf}")
+    if "damage_type" in body and not isinstance(body["damage_type"], str):
+        raise ContractError("inference damage_type must be str when present")
+    if "bounding_boxes" in body:
+        bboxes = body["bounding_boxes"]
+        if not isinstance(bboxes, list):
+            raise ContractError("inference bounding_boxes must be a list")
+        for i, box in enumerate(bboxes):
+            if not isinstance(box, dict):
+                raise ContractError(f"bounding_boxes[{i}] must be an object")
+
+
 def validate_stored_damage_row(item: dict[str, Any]) -> None:
     """
     Contract for a DynamoDB item written by damage_detection Lambda

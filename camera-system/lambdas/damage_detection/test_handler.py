@@ -35,9 +35,12 @@ def env_and_handler():
     boto_patch.start()
     ddb_patch.start()
 
-    import importlib
-    import handler as h
-    importlib.reload(h)
+    import importlib.util
+    handler_path = os.path.join(os.path.dirname(__file__), "handler.py")
+    spec = importlib.util.spec_from_file_location("handler", handler_path)
+    h = importlib.util.module_from_spec(spec)
+    sys.modules["handler"] = h
+    spec.loader.exec_module(h)
 
     h.s3 = mock_s3_client
     h.sagemaker_runtime = mock_sm_client
@@ -180,3 +183,65 @@ class TestLambdaHandler:
 
         item = h.table.put_item.call_args[1]["Item"]
         validate_stored_damage_row(item)
+
+
+class TestInferenceRoundtrip:
+    """End-to-end: model response -> Lambda parsing -> DynamoDB item, all validated."""
+
+    FIXTURE_RESPONSES = [
+        {
+            "confidence": 0.92,
+            "damage_type": "dent",
+            "bounding_boxes": [{"x": 10, "y": 20, "w": 30, "h": 40}],
+        },
+        {
+            "confidence": 0.0,
+            "damage_type": "none",
+            "bounding_boxes": [],
+        },
+        {
+            "confidence": 0.45,
+        },
+        {
+            "confidence": 0.78,
+            "damage_type": "scratch",
+            "bounding_boxes": [
+                {"x": 100, "y": 200, "w": 50, "h": 60},
+                {"x": 300, "y": 400, "w": 25, "h": 30},
+            ],
+            "model_version": "v1.0",
+        },
+    ]
+
+    @pytest.mark.parametrize("model_response", FIXTURE_RESPONSES)
+    def test_valid_model_response_produces_valid_row(self, env_and_handler, model_response):
+        """Every fixture response must pass the inference contract AND
+        produce a DynamoDB row that passes the stored-row contract."""
+        review_api_path = os.path.join(os.path.dirname(__file__), "..", "review_api")
+        if review_api_path not in sys.path:
+            sys.path.insert(0, review_api_path)
+        from contracts import validate_inference_response, validate_stored_damage_row
+
+        h = env_and_handler
+        validate_inference_response(model_response)
+
+        h.s3.get_object.return_value = {
+            "Body": MagicMock(read=lambda: b"img"),
+        }
+        h.sagemaker_runtime.invoke_endpoint.return_value = {
+            "Body": MagicMock(
+                read=lambda: json.dumps(model_response).encode()
+            ),
+        }
+
+        event = _s3_event("b", "scans/PLT/e1/cam0/frame_0000.jpg")
+        resp = h.lambda_handler(event, None)
+        assert resp["statusCode"] == 200
+
+        item = h.table.put_item.call_args[1]["Item"]
+        validate_stored_damage_row(item)
+
+        conf = model_response.get("confidence", 0)
+        assert item["damage_detected"] == (conf >= 0.6)
+        assert item["damage_type"] == model_response.get("damage_type", "unknown")
+        assert json.loads(item["bounding_boxes"]) == model_response.get("bounding_boxes", [])

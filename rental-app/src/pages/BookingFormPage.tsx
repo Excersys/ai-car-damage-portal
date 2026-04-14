@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation, useSearchParams } from 'react-rout
 import PaymentForm from '../components/PaymentForm'
 import VeriffVerification from '../components/VeriffVerification'
 import { fetchCarById } from '../lib/vehicleApi'
+import { apiClient } from '../config/api'
 
 interface Car {
   id: number
@@ -171,6 +172,11 @@ const BookingFormPage: React.FC = () => {
   }, [currentStep, verificationCompleted])
 
   const handleNextStep = () => {
+    // Gate: cannot proceed to payment (step 5) without completed verification
+    if (currentStep === 4 && !verificationSessionId) {
+      alert('Identity verification is required before proceeding to payment.')
+      return
+    }
     if (currentStep < 5) {
       setCurrentStep(currentStep + 1)
     }
@@ -289,8 +295,7 @@ const BookingFormPage: React.FC = () => {
     }
   }
 
-  const handleCompleteBooking = (_paymentData: any) => {
-    const id = 'BK' + Date.now()
+  const handleCompleteBooking = async (_paymentData: any) => {
     const days = calculateDays()
     const basePrice = car ? car.price * days : 0
     const insurance = insuranceOptions.find(opt => opt.id === selectedInsurance)
@@ -300,6 +305,25 @@ const BookingFormPage: React.FC = () => {
       return total + (opt ? opt.price * days : 0)
     }, 0)
     const taxes = Math.round((basePrice + insurancePrice + addOnsPrice) * 0.085 * 100) / 100
+
+    // Persist booking to backend
+    let id = 'BK' + Date.now()
+    try {
+      const response = await apiClient.post('/bookings', {
+        carId: car?.id,
+        userId: _paymentData?.customerInfo?.email || 'guest',
+        userName: `${bookingDetails.firstName || ''} ${bookingDetails.lastName || ''}`.trim() || 'Guest',
+        startDate: bookingDetails.pickupDate,
+        endDate: bookingDetails.dropoffDate,
+        paymentIntentId: _paymentData?.paymentIntentId,
+        totalAmount: basePrice + insurancePrice + addOnsPrice + taxes,
+      })
+      if (response.data?.bookingId) {
+        id = response.data.bookingId
+      }
+    } catch (err) {
+      console.error('Failed to persist booking, using local ID:', err)
+    }
 
     navigate(`/booking-confirmation/${id}`, {
       state: {

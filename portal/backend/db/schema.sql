@@ -60,5 +60,16 @@ CREATE TABLE detected_damage (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Payments (link Stripe to reservations)
+CREATE TABLE payments (
+    id VARCHAR(255) PRIMARY KEY,
+    reservation_id VARCHAR(255) REFERENCES reservations(id),
+    stripe_payment_intent_id VARCHAR(255) UNIQUE,
+    amount INTEGER NOT NULL,
+    currency VARCHAR(3) DEFAULT 'usd',
+    status VARCHAR(50) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Migration: ACR-137 — Add qc_reviewed_at to scans table
 -- ALTER TABLE scans ADD COLUMN qc_reviewed_at TIMESTAMP;

@@ -66,6 +66,9 @@ const stripeClient = stripe(STRIPE_SECRET_KEY, {
   apiVersion: STRIPE_API_VERSION,
 });
 
+// Idempotency set for processed webhook events (per Lambda instance)
+const processedWebhookEvents = new Set();
+
 // CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1032,7 +1035,46 @@ const handlers = {
     } = queryParams;
 
     try {
-      // Mock vehicle data - in production this would come from database
+      // Try DB first
+      let dbVehicles = null;
+      {
+        const conditions = ["status != 'Retired'"];
+        const params = [];
+        let paramIdx = 1;
+
+        if (vehicleType !== 'all') {
+          conditions.push(`LOWER(color) = $${paramIdx}`);
+          params.push(vehicleType.toLowerCase());
+          paramIdx++;
+        }
+
+        const sql = `SELECT * FROM cars WHERE ${conditions.join(' AND ')} ORDER BY make, model`;
+        const rows = await dbQuery(sql, params);
+        if (rows) {
+          dbVehicles = rows.map(r => ({
+            id: r.id,
+            make: r.make,
+            model: r.model,
+            year: r.year,
+            type: (r.color || 'sedan').toLowerCase(),
+            category: 'standard',
+            pricePerDay: 49.99,
+            location: 'san-francisco',
+            features: [],
+            images: r.image_url ? [r.image_url] : [],
+            rating: 4.5,
+            reviewCount: 0,
+            available: r.status === 'Available',
+            transmission: 'automatic',
+            passengers: 5,
+            luggage: 2,
+            fuelType: 'gasoline',
+            mpg: 30
+          }));
+        }
+      }
+
+      // Mock vehicle data — fallback when DB is not configured
       const mockVehicles = [
         {
           id: 'VH001',
@@ -1116,8 +1158,10 @@ const handlers = {
         }
       ];
 
+      const sourceVehicles = dbVehicles || mockVehicles;
+
       // Apply filters
-      let filteredVehicles = mockVehicles.filter(vehicle => {
+      let filteredVehicles = sourceVehicles.filter(vehicle => {
         // Location filter
         if (location !== 'all' && vehicle.location !== location) return false;
         
@@ -1205,7 +1249,40 @@ const handlers = {
     }
 
     try {
-      // Mock vehicle detail - in production this would come from database
+      // Try DB first
+      const rows = await dbQuery(`SELECT * FROM cars WHERE id = $1`, [vehicleId]);
+      if (rows && rows.length > 0) {
+        const r = rows[0];
+        return createResponse(200, {
+          vehicle: {
+            id: r.id,
+            make: r.make,
+            model: r.model,
+            year: r.year,
+            type: (r.color || 'sedan').toLowerCase(),
+            category: 'standard',
+            pricePerDay: 49.99,
+            pricePerWeek: 299.99,
+            pricePerMonth: 999.99,
+            location: 'san-francisco',
+            features: [],
+            images: r.image_url ? [r.image_url] : [],
+            rating: 4.5,
+            reviewCount: 0,
+            available: r.status === 'Available',
+            transmission: 'automatic',
+            passengers: 5,
+            luggage: 2,
+            fuelType: 'gasoline',
+            mpg: 30,
+            specifications: {},
+            policies: {},
+            reviews: []
+          }
+        });
+      }
+
+      // Mock vehicle detail — fallback when DB is not configured
       const mockVehicleDetail = {
         id: vehicleId,
         make: 'Tesla',
@@ -1564,9 +1641,18 @@ const handlers = {
         setup_future_usage: 'off_session', // Allow saving payment method
       });
 
+      // Persist payment record in DB (best-effort — does not block response)
+      const paymentId = `pay_${Date.now()}`;
+      await dbQuery(
+        `INSERT INTO payments (id, reservation_id, stripe_payment_intent_id, amount, currency, status)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [paymentId, reservationId, paymentIntent.id, Math.round(amount * 100), currency.toLowerCase(), paymentIntent.status || 'pending']
+      );
+
       return createResponse(200, {
         clientSecret: paymentIntent.client_secret,
         paymentIntentId: paymentIntent.id,
+        paymentId,
         amount: paymentIntent.amount,
         currency: paymentIntent.currency,
         status: paymentIntent.status,
@@ -1858,7 +1944,13 @@ const handlers = {
 
   // Stripe webhook handler
   'POST /payments/webhook': async (event) => {
-    const sig = event.headers['stripe-signature'];
+    const sig = event.headers?.['stripe-signature'] || event.headers?.['Stripe-Signature'];
+
+    if (!sig) {
+      console.error('Webhook missing stripe-signature header');
+      return createResponse(400, { error: 'Missing stripe-signature header' });
+    }
+
     let stripeEvent;
 
     try {
@@ -1868,40 +1960,77 @@ const handlers = {
       return createResponse(400, { error: 'Invalid signature' });
     }
 
-    try {
-      // Handle the event
-      switch (stripeEvent.type) {
-        case 'payment_intent.succeeded':
-          console.log('Payment succeeded:', stripeEvent.data.object);
-          // Update booking status, send confirmation email, etc.
-          break;
+    // Idempotency: skip already-processed events
+    if (processedWebhookEvents.has(stripeEvent.id)) {
+      console.log(`Duplicate webhook event ${stripeEvent.id}, skipping`);
+      return createResponse(200, { received: true, duplicate: true });
+    }
+    processedWebhookEvents.add(stripeEvent.id);
 
-        case 'payment_intent.payment_failed':
-          console.log('Payment failed:', stripeEvent.data.object);
-          // Handle failed payment, notify user, etc.
+    try {
+      const paymentIntent = stripeEvent.data.object;
+
+      switch (stripeEvent.type) {
+        case 'payment_intent.succeeded': {
+          console.log('Payment succeeded:', paymentIntent.id);
+          // Update the reservation status to Confirmed in the DB
+          const piId = paymentIntent.id;
+          const dbResult = await dbQuery(
+            `UPDATE reservations SET status = 'Confirmed', updated_at = NOW() WHERE payment_intent_id = $1 RETURNING *`,
+            [piId]
+          );
+          if (dbResult && dbResult.length > 0) {
+            console.log('Reservation confirmed via webhook:', dbResult[0].id);
+          } else {
+            console.warn('No reservation found for payment_intent_id:', piId);
+          }
           break;
+        }
+
+        case 'payment_intent.payment_failed': {
+          console.log('Payment failed:', paymentIntent.id);
+          const piId = paymentIntent.id;
+          const failReason = paymentIntent.last_payment_error?.message || 'Unknown failure';
+          await dbQuery(
+            `UPDATE reservations SET status = 'PaymentFailed', failure_reason = $2, updated_at = NOW() WHERE payment_intent_id = $1`,
+            [piId, failReason]
+          );
+          break;
+        }
+
+        case 'charge.refunded': {
+          console.log('Charge refunded:', paymentIntent.id);
+          const chargePI = paymentIntent.payment_intent;
+          if (chargePI) {
+            await dbQuery(
+              `UPDATE reservations SET status = 'Refunded', updated_at = NOW() WHERE payment_intent_id = $1`,
+              [chargePI]
+            );
+          }
+          break;
+        }
 
         case 'payment_intent.requires_action':
-          console.log('Payment requires action:', stripeEvent.data.object);
-          // Handle 3D Secure or other authentication requirements
+          console.log('Payment requires action:', paymentIntent.id);
           break;
 
         case 'charge.dispute.created':
-          console.log('Dispute created:', stripeEvent.data.object);
-          // Handle dispute, notify support team, etc.
+          console.log('Dispute created:', paymentIntent.id);
           break;
 
         default:
           console.log(`Unhandled event type ${stripeEvent.type}`);
       }
 
+      // Always return 200 so Stripe does not retry
       return createResponse(200, { received: true });
 
     } catch (error) {
       console.error('Error processing webhook:', error);
-      return createResponse(500, {
-        error: 'Webhook processing failed',
-        message: error.message
+      // Return 200 even on processing errors to prevent Stripe retries
+      return createResponse(200, {
+        received: true,
+        processingError: error.message
       });
     }
   },
@@ -1923,69 +2052,83 @@ const handlers = {
     }
 
     try {
+      // 1. Verify the paymentIntentId with Stripe
+      const paymentIntent = await stripeClient.paymentIntents.retrieve(paymentIntentId);
+
+      // 2. Capture if needed
+      if (paymentIntent.status === 'requires_capture') {
+        await stripeClient.paymentIntents.capture(paymentIntentId);
+      } else if (paymentIntent.status !== 'succeeded') {
+        return createResponse(400, {
+          error: 'Payment not completed',
+          paymentStatus: paymentIntent.status
+        });
+      }
+
+      // 3. Update reservation status in DB
+      const dbResult = await dbQuery(
+        `UPDATE reservations SET status = 'Confirmed', updated_at = NOW() WHERE id = $1 AND payment_intent_id = $2 RETURNING *`,
+        [reservationId, paymentIntentId]
+      );
+
       // Generate booking confirmation number
       const bookingId = `BK${Date.now()}${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-      
-      // In production, this would:
-      // 1. Verify payment status with Stripe
-      // 2. Update database with confirmed booking
-      // 3. Send confirmation email
-      // 4. Update vehicle availability
-      // 5. Create booking record with all details
-      
+
       const booking = {
         id: bookingId,
         status: 'confirmed',
         paymentIntentId,
+        paymentStatus: paymentIntent.status === 'requires_capture' ? 'captured' : paymentIntent.status,
         reservationId,
         verificationSessionId,
         customer: {
-          firstName: bookingDetails.firstName || '',
-          lastName: bookingDetails.lastName || '',
-          email: bookingDetails.email || '',
-          phone: bookingDetails.phone || ''
+          firstName: bookingDetails?.firstName || '',
+          lastName: bookingDetails?.lastName || '',
+          email: bookingDetails?.email || '',
+          phone: bookingDetails?.phone || ''
         },
         vehicle: {
-          id: bookingDetails.car?.id || '',
-          make: bookingDetails.car?.make || '',
-          model: bookingDetails.car?.model || '',
-          year: bookingDetails.car?.year || '',
-          pricePerDay: bookingDetails.car?.pricePerDay || 0
+          id: bookingDetails?.car?.id || '',
+          make: bookingDetails?.car?.make || '',
+          model: bookingDetails?.car?.model || '',
+          year: bookingDetails?.car?.year || '',
+          pricePerDay: bookingDetails?.car?.pricePerDay || 0
         },
         rental: {
-          pickupDate: bookingDetails.pickupDate,
-          returnDate: bookingDetails.returnDate,
-          pickupTime: bookingDetails.pickupTime || '10:00',
-          returnTime: bookingDetails.returnTime || '10:00',
-          pickupLocation: bookingDetails.pickupLocation || 'main-office',
-          returnLocation: bookingDetails.returnLocation || 'main-office',
-          totalDays: bookingDetails.totalDays || 1
+          pickupDate: bookingDetails?.pickupDate,
+          returnDate: bookingDetails?.returnDate,
+          pickupTime: bookingDetails?.pickupTime || '10:00',
+          returnTime: bookingDetails?.returnTime || '10:00',
+          pickupLocation: bookingDetails?.pickupLocation || 'main-office',
+          returnLocation: bookingDetails?.returnLocation || 'main-office',
+          totalDays: bookingDetails?.totalDays || 1
         },
         pricing: {
-          basePrice: bookingDetails.pricing?.basePrice || 0,
-          insurancePrice: bookingDetails.pricing?.insurancePrice || 0,
-          addOnsPrice: bookingDetails.pricing?.addOnsPrice || 0,
-          taxes: bookingDetails.pricing?.taxes || 0,
-          total: bookingDetails.pricing?.total || 0,
+          basePrice: bookingDetails?.pricing?.basePrice || 0,
+          insurancePrice: bookingDetails?.pricing?.insurancePrice || 0,
+          addOnsPrice: bookingDetails?.pricing?.addOnsPrice || 0,
+          taxes: bookingDetails?.pricing?.taxes || 0,
+          total: bookingDetails?.pricing?.total || 0,
           currency: 'USD'
         },
         insurance: {
-          type: bookingDetails.insuranceType || 'basic',
-          coverage: bookingDetails.insuranceType === 'comprehensive' ? 'Full Coverage' : 'Basic Coverage'
+          type: bookingDetails?.insuranceType || 'basic',
+          coverage: bookingDetails?.insuranceType === 'comprehensive' ? 'Full Coverage' : 'Basic Coverage'
         },
-        addOns: bookingDetails.addOns || [],
+        addOns: bookingDetails?.addOns || [],
         confirmation: {
           bookingReference: bookingId,
           confirmationCode: `${bookingId.slice(-6)}`,
           bookingDate: new Date().toISOString(),
-          estimatedTotal: bookingDetails.pricing?.total || 0
+          estimatedTotal: bookingDetails?.pricing?.total || 0
         },
         policies: {
           cancellationPolicy: 'Free cancellation up to 24 hours before pickup',
           lateFees: '$50 per hour for late returns',
           fuelPolicy: 'Return with same fuel level',
           mileagePolicy: 'Unlimited mileage included'
-        }
+        },
+        dbRecord: dbResult && dbResult.length > 0 ? dbResult[0] : null
       };
 
       // Mock sending confirmation email

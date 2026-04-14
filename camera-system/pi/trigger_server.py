@@ -59,6 +59,11 @@ class TriggerPayload(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     plate: str = "unknown"
+    license_plate: str = ""
+
+    def get_plate(self) -> str:
+        """Return license_plate if provided, otherwise fall back to plate."""
+        return self.license_plate or self.plate
 
 
 class CameraResultItem(BaseModel):
@@ -148,7 +153,7 @@ async def trigger(payload: TriggerPayload):
     captures: list[CaptureResult] = capture_all(event_id)
     captured_count = sum(1 for c in captures if c.success)
 
-    s3_results = upload_event(event_id, captures, plate=payload.plate)
+    s3_results = upload_event(event_id, captures, plate=payload.get_plate())
     uploaded_ids = {r.camera_id for r in s3_results if r.success}
     failed_results = [r for r in s3_results if not r.success]
 
@@ -211,7 +216,7 @@ async def scan_upload(payload: ScanUploadPayload):
         for f in payload.files
     ]
 
-    s3_results = upload_event(payload.event_id, captures, plate=payload.plate)
+    s3_results = upload_event(payload.event_id, captures, plate=payload.get_plate())
     uploaded_ids = {r.camera_id for r in s3_results if r.success}
     failed_results = [r for r in s3_results if not r.success]
 

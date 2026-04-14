@@ -89,6 +89,55 @@ class TestUploadEvent:
         assert results[0].success is True
 
     @patch("s3_uploader.upload_image")
+    def test_uses_capture_frame_index_not_enumerate_position(self, mock_upload):
+        """Frame index in the S3 key must come from CaptureResult.frame_index,
+        not from the position of the capture in the filtered to_upload list."""
+        captured_keys: list[str] = []
+
+        def _record_key(local_path, s3_key, camera_id=""):
+            captured_keys.append(s3_key)
+            return S3Result(
+                camera_id=camera_id,
+                local_path=local_path,
+                s3_key=s3_key,
+                success=True,
+            )
+
+        mock_upload.side_effect = _record_key
+
+        captures = [
+            CaptureResult(
+                camera_id="usb_0",
+                local_path=Path("/tmp/a.jpg"),
+                timestamp="t",
+                success=False,  # failure — must not shift other indices
+            ),
+            CaptureResult(
+                camera_id="usb_1",
+                local_path=Path("/tmp/b.jpg"),
+                timestamp="t",
+                success=True,
+                frame_index=0,
+            ),
+            CaptureResult(
+                camera_id="usb_2",
+                local_path=Path("/tmp/c.jpg"),
+                timestamp="t",
+                success=True,
+                frame_index=2,  # original burst frame 2, not position 1
+            ),
+        ]
+
+        results = upload_event("evt123", captures, plate="ABC123")
+
+        assert len(results) == 2
+        # Keys must reflect the original frame_index, not enumerate position
+        assert "scans/ABC123/evt123/usb_1/frame_0000.jpg" in captured_keys
+        assert "scans/ABC123/evt123/usb_2/frame_0002.jpg" in captured_keys
+        # Enumerate-position key (frame_0001 for usb_2) must NOT appear
+        assert "scans/ABC123/evt123/usb_2/frame_0001.jpg" not in captured_keys
+
+    @patch("s3_uploader.upload_image")
     def test_empty_captures(self, mock_upload):
         results = upload_event("evt123", [])
         assert results == []

@@ -200,13 +200,14 @@ async def scan_upload(payload: ScanUploadPayload):
     from pathlib import Path as _Path
 
     class _FakeCapture:
-        def __init__(self, camera_id: str, local_path: str):
+        def __init__(self, camera_id: str, local_path: str, frame_index: int = 0):
             self.camera_id = camera_id
             self.local_path = _Path(local_path)
             self.success = self.local_path.exists()
+            self.frame_index = frame_index
 
     captures = [
-        _FakeCapture(f.camera_id, f.local_path)
+        _FakeCapture(f.camera_id, f.local_path, f.frame_index)
         for f in payload.files
     ]
 

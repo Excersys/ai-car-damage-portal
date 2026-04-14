@@ -32,6 +32,7 @@ class CaptureResult:
     size_bytes: int = 0
     success: bool = True
     error: str = ""
+    frame_index: int = 0
 
 
 def generate_event_id() -> str:

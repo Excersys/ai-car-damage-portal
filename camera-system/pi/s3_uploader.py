@@ -113,22 +113,23 @@ def upload_event(
 
     with ThreadPoolExecutor(max_workers=len(to_upload)) as pool:
         futures = {}
-        for idx, cap in enumerate(to_upload):
-            s3_key = s3_key_for(event_id, cap.camera_id, plate=plate, frame_index=idx)
+        for cap in to_upload:
+            frame_idx = getattr(cap, "frame_index", 0)
+            s3_key = s3_key_for(event_id, cap.camera_id, plate=plate, frame_index=frame_idx)
             fut = pool.submit(upload_image, cap.local_path, s3_key, cap.camera_id)
-            futures[fut] = cap.camera_id
+            futures[fut] = (cap.camera_id, frame_idx)
 
         for future in as_completed(futures):
+            cid, frame_idx = futures[future]
             try:
                 results.append(future.result())
             except Exception as exc:
-                cid = futures[future]
                 logger.error("Unexpected upload error for %s: %s", cid, exc)
                 results.append(
                     S3Result(
                         camera_id=cid,
                         local_path=Path(""),
-                        s3_key=s3_key_for(event_id, cid, plate=plate),
+                        s3_key=s3_key_for(event_id, cid, plate=plate, frame_index=frame_idx),
                         success=False,
                         error=str(exc),
                     )

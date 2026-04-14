@@ -448,43 +448,34 @@ const PaymentForm: React.FC<PaymentFormProps> = (props) => {
       setLoading(true);
       setError(null);
 
-      // For development: Use mock payment intent data
-      // In production, this would call your backend API
-      if (import.meta.env.DEV) {
-        // Mock response for development
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
-        
-        // Use a more realistic mock client secret format that Stripe will accept for testing
-        const mockPaymentIntentData = {
-          clientSecret: `pi_1234567890abcdef1234567890abcdef_secret_1234567890abcdef1234567890abcdef`,
-          paymentIntentId: 'pi_mock_' + Date.now(),
-          amount: Math.round(props.pricing.total * 100), // Stripe amounts are in cents
-          currency: 'usd',
-          publishableKey: import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_mock_key'
-        };
-        
-        setPaymentIntentData(mockPaymentIntentData);
-      } else {
-        // Production API call
-        const response = await apiClient.post('/payments/create-intent', {
-          amount: props.pricing.total,
-          currency: 'usd',
-          reservationId: props.bookingData.reservationId || 'temp_reservation',
-          customerId: props.bookingData.customerId || null,
-          metadata: {
-            carId: props.car.id,
-            verificationSessionId: props.verificationSessionId,
-            pickupDate: props.bookingData.pickupDate,
-            returnDate: props.bookingData.returnDate,
-            totalDays: props.totalDays.toString()
-          }
-        });
+      // Always call the API to create a real PaymentIntent.
+      // In dev, the API should use Stripe test keys (sk_test_...) so
+      // the payment flow is testable end-to-end.
+      const response = await apiClient.post('/payments/create-intent', {
+        amount: props.pricing.total,
+        currency: 'usd',
+        reservationId: props.bookingData.reservationId || 'temp_reservation',
+        customerId: props.bookingData.customerId || null,
+        metadata: {
+          carId: props.car.id,
+          verificationSessionId: props.verificationSessionId,
+          pickupDate: props.bookingData.pickupDate,
+          returnDate: props.bookingData.returnDate,
+          totalDays: props.totalDays.toString()
+        }
+      });
 
-        setPaymentIntentData(response.data);
-      }
+      setPaymentIntentData(response.data);
     } catch (err: any) {
       console.error('Error creating payment intent:', err);
-      setError(err.response?.data?.error || 'Failed to initialize payment. Please try again.');
+      if (!import.meta.env.VITE_API_BASE_URL) {
+        setError(
+          'Payment API not configured. Set VITE_API_BASE_URL and ensure the ' +
+          'API has Stripe test keys (STRIPE_SECRET_KEY=sk_test_...) configured.'
+        );
+      } else {
+        setError(err.response?.data?.error || 'Failed to initialize payment. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

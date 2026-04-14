@@ -73,6 +73,12 @@ def upload_image(local_path: Path, s3_key: str, camera_id: str = "") -> S3Result
             ExtraArgs={"ContentType": "image/jpeg"},
         )
         logger.info("Uploaded %s -> s3://%s/%s", local_path, config.S3_BUCKET, s3_key)
+        # Delete local file after successful upload to save disk space
+        try:
+            local_path.unlink(missing_ok=True)
+            logger.debug("Deleted local file after upload: %s", local_path)
+        except OSError:
+            pass
         return S3Result(
             camera_id=camera_id,
             local_path=local_path,

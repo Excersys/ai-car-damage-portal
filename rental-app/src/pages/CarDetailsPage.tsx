@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { fetchCarById, type ApiCar } from '../lib/vehicleApi'
 
 // Import car images
 import teslaModel3 from '../images/SFAR.rendition.vlarge.png'
@@ -8,12 +9,46 @@ import toyotaCamry from '../images/CCAR.rendition.vlarge.png'
 import fordExplorer from '../images/FRAR.rendition.vlarge.png'
 import jeepWrangler from '../images/IJAR.rendition.vlarge.png'
 
-const CarDetailsPage: React.FC = () => {
-  const { carId } = useParams()
-  const navigate = useNavigate()
-  
-  // Mock car data - in real app, this would come from API
-  const mockCars: { [key: string]: any } = {
+const imageMap: Record<string, string> = {
+  tesla: teslaModel3,
+  nissan: teslaModel3,
+  bmw: bmwX5,
+  mercedes: bmwX5,
+  toyota: toyotaCamry,
+  chevrolet: toyotaCamry,
+  ford: fordExplorer,
+  jeep: jeepWrangler,
+}
+
+function mapApiCarToDetail(c: ApiCar): any {
+  const img = imageMap[c.make.toLowerCase()] ?? toyotaCamry
+  return {
+    id: Number(c.id) || 0,
+    make: c.make,
+    model: c.model,
+    year: c.year,
+    price: c.pricePerDay ?? 0,
+    image: img,
+    gallery: [img, img, img, img],
+    features: c.features ?? [],
+    specs: {
+      engine: String(c.specs?.engine ?? 'N/A'),
+      transmission: String(c.specs?.transmission ?? 'Automatic'),
+      fuelType: String(c.specs?.fuelType ?? c.type),
+      seats: Number(c.specs?.seats ?? 5),
+      doors: Number(c.specs?.doors ?? 4),
+      luggage: String(c.specs?.luggage ?? 'N/A'),
+      ...(c.specs?.mpg ? { mpg: String(c.specs.mpg) } : {}),
+      ...(c.specs?.range ? { range: String(c.specs.range) } : {}),
+    },
+    description: c.description ?? `The ${c.make} ${c.model} — a premium rental option.`,
+    location: c.location ?? 'Available',
+    rating: c.rating ?? 4.5,
+    reviews: c.reviews ?? 0,
+  }
+}
+
+const fallbackCars: { [key: string]: any } = {
     '1': {
       id: 1,
       make: 'Tesla',
@@ -240,9 +275,20 @@ const CarDetailsPage: React.FC = () => {
     }
   }
 
-  const car = mockCars[carId || '1']
+const CarDetailsPage: React.FC = () => {
+  const { carId } = useParams()
+  const navigate = useNavigate()
+
+  const [car, setCar] = useState<any>(fallbackCars[carId || '1'])
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const [selectedOptions, setSelectedOptions] = useState<{[key: string]: boolean}>({})
+
+  useEffect(() => {
+    if (!carId) return
+    fetchCarById(carId).then((apiCar) => {
+      if (apiCar) setCar(mapApiCarToDetail(apiCar))
+    })
+  }, [carId])
   
   // Available rental options
   const rentalOptions = [

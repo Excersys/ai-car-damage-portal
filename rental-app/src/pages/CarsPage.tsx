@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { fetchCars, type ApiCar } from '../lib/vehicleApi'
 
 // Import car images
 import teslaModel3 from '../images/SFAR.rendition.vlarge.png'
@@ -26,20 +27,39 @@ interface Car {
   }
 }
 
-const CarsPage: React.FC = () => {
-  const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
-  const [selectedCarType, setSelectedCarType] = useState('All Types')
-  const [selectedPriceRange, setSelectedPriceRange] = useState('All Prices')
-  const [isEditing, setIsEditing] = useState(false)
-  const [editForm, setEditForm] = useState({
-    pickup: '',
-    dropoff: '',
-    pickupDate: '',
-    dropoffDate: ''
-  })
+const imageMap: Record<string, string> = {
+  tesla: teslaModel3,
+  nissan: teslaModel3,
+  bmw: bmwX5,
+  mercedes: bmwX5,
+  toyota: toyotaCamry,
+  chevrolet: toyotaCamry,
+  ford: fordExplorer,
+  jeep: jeepWrangler,
+}
 
-  const mockCars: Car[] = [
+function mapApiCar(c: ApiCar): Car {
+  const img = imageMap[c.make.toLowerCase()] ?? toyotaCamry
+  return {
+    id: Number(c.id) || 0,
+    make: c.make,
+    model: c.model,
+    year: c.year,
+    price: c.pricePerDay ?? 0,
+    type: c.type,
+    category: c.type,
+    image: img,
+    features: c.features ?? [],
+    specs: {
+      transmission: String(c.specs?.transmission ?? 'Automatic'),
+      fuel: String(c.specs?.fuelType ?? c.type),
+      seats: Number(c.specs?.seats ?? 5),
+      doors: Number(c.specs?.doors ?? 4),
+    },
+  }
+}
+
+const FALLBACK_CARS: Car[] = [
     {
       id: 1,
       make: 'Tesla',
@@ -138,8 +158,30 @@ const CarsPage: React.FC = () => {
     }
   ]
 
+const CarsPage: React.FC = () => {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const [selectedCarType, setSelectedCarType] = useState('All Types')
+  const [selectedPriceRange, setSelectedPriceRange] = useState('All Prices')
+  const [cars, setCars] = useState<Car[]>(FALLBACK_CARS)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editForm, setEditForm] = useState({
+    pickup: '',
+    dropoff: '',
+    pickupDate: '',
+    dropoffDate: ''
+  })
+
+  useEffect(() => {
+    fetchCars().then((apiCars) => {
+      if (apiCars && apiCars.length > 0) {
+        setCars(apiCars.map(mapApiCar))
+      }
+    })
+  }, [])
+
   const filteredCars = useMemo(() => {
-    const result = mockCars.filter(car => {
+    return cars.filter(car => {
       const matchesCarType = selectedCarType === 'All Types' || car.type === selectedCarType
       
       let matchesPriceRange = true
@@ -153,8 +195,7 @@ const CarsPage: React.FC = () => {
       
       return matchesCarType && matchesPriceRange
     })
-    return result
-  }, [selectedCarType, selectedPriceRange, mockCars])
+  }, [selectedCarType, selectedPriceRange, cars])
 
   // Extract pickup/dropoff info from URL params
   const pickupLocation = searchParams.get('pickup') || 'LAX'

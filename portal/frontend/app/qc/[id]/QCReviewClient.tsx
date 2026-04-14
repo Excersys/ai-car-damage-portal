@@ -6,6 +6,7 @@ import { Check, X, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useState, useRef, useCallback } from "react";
 import { updateQCStatus } from "@/lib/actions";
+import { useSession } from "next-auth/react";
 
 interface QCReviewClientProps {
   scan: ScanEvent;
@@ -34,6 +35,7 @@ function bboxOverlayStyle(
 
 export default function QCReviewClient({ scan, car }: QCReviewClientProps) {
   const router = useRouter();
+  const { data: session } = useSession();
   const [showOverlay, setShowOverlay] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -51,7 +53,7 @@ export default function QCReviewClient({ scan, car }: QCReviewClientProps) {
   const handleApprove = async () => {
     if (confirm("Confirm Damage? This will generate a report.")) {
       setIsSubmitting(true);
-      await updateQCStatus(scan.id, "Approved", "current-user-id");
+      await updateQCStatus(scan.id, "Approved", session?.user?.email || "unknown");
       alert("Damage Confirmed! Report generated.");
       router.push("/qc");
     }
@@ -60,7 +62,7 @@ export default function QCReviewClient({ scan, car }: QCReviewClientProps) {
   const handleReject = async () => {
     if (confirm("Reject Flag? This will mark as clean.")) {
       setIsSubmitting(true);
-      await updateQCStatus(scan.id, "Rejected", "current-user-id");
+      await updateQCStatus(scan.id, "Rejected", session?.user?.email || "unknown");
       router.push("/qc");
     }
   };

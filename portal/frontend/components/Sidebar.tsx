@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Car, ShieldCheck, ClipboardList, Users, Search, Settings } from "lucide-react";
+import { LayoutDashboard, Car, ShieldCheck, ClipboardList, Users, Search, Settings, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSession, signOut } from "next-auth/react";
 
 const navItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -17,6 +18,7 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
 
   return (
     <div className="flex h-full w-64 flex-col bg-slate-900 text-white">
@@ -49,12 +51,23 @@ export default function Sidebar() {
         })}
       </nav>
       <div className="border-t border-slate-800 p-4">
-        <Link href="/settings" className="flex items-center hover:opacity-80 transition-opacity">
-          <div className="ml-3">
-            <p className="text-sm font-medium text-white">Admin User</p>
-            <p className="text-xs text-slate-400">View Profile</p>
-          </div>
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link href="/settings" className="flex items-center hover:opacity-80 transition-opacity">
+            <div className="ml-3">
+              <p className="text-sm font-medium text-white">{session?.user?.name || "Admin User"}</p>
+              <p className="text-xs text-slate-400">{session?.user?.email || "View Profile"}</p>
+            </div>
+          </Link>
+          {session && (
+            <button
+              onClick={() => signOut()}
+              className="text-slate-400 hover:text-white transition-colors"
+              title="Sign out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -6,6 +6,11 @@ module.exports = {
   modulePathIgnorePatterns: ['<rootDir>/infrastructure/', '<rootDir>/camera-system/', '<rootDir>/dist/'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '\\.(png|jpg|jpeg|gif|svg|webp)$': '<rootDir>/src/__mocks__/fileMock.js',
+    '\\.(css|less|scss)$': '<rootDir>/src/__mocks__/styleMock.js',
+  },
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json', diagnostics: false }],
   },
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',

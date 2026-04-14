@@ -1,0 +1,30 @@
+[Unit]
+Description=Tunnel Capture Trigger Server (FastAPI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/camera-system/pi
+EnvironmentFile=/home/pi/camera-system/pi/.env
+ExecStart=/home/pi/camera-system/pi/.venv/bin/python3 -m uvicorn trigger_server:app --host 0.0.0.0 --port 8000
+
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tunnel-trigger
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/data/tunnel
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

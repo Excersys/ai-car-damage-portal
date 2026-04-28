@@ -142,3 +142,56 @@ export async function fetchAdminFinancialAnalytics(): Promise<AdminFinancialSumm
     return null
   }
 }
+
+// ── Mutations ────────────────────────────────────────────────────
+
+export async function updateBookingStatus(
+  bookingId: string,
+  status: string,
+  notes?: string,
+): Promise<{ booking: { id: string; status: string; updatedAt: string } } | null> {
+  if (!isApiConfigured()) return null
+  try {
+    const { data } = await apiClient.patch(`/admin/bookings/${bookingId}`, { status, notes })
+    return data
+  } catch {
+    return null
+  }
+}
+
+export async function addAdminVehicle(
+  vehicle: Omit<AdminVehicleRow, 'id'>,
+): Promise<{ vehicle: AdminVehicleRow } | null> {
+  if (!isApiConfigured()) return null
+  try {
+    const { data } = await apiClient.post('/admin/vehicles', vehicle)
+    return data
+  } catch {
+    return null
+  }
+}
+
+export async function updateAdminVehicle(
+  vehicleId: string,
+  updates: Partial<AdminVehicleRow>,
+): Promise<{ vehicle: AdminVehicleRow } | null> {
+  if (!isApiConfigured()) return null
+  try {
+    const { data } = await apiClient.put(`/admin/vehicles/${vehicleId}`, updates)
+    return data
+  } catch {
+    return null
+  }
+}
+
+export async function deleteAdminVehicle(
+  vehicleId: string,
+): Promise<{ message: string } | null> {
+  if (!isApiConfigured()) return null
+  try {
+    const { data } = await apiClient.delete(`/admin/vehicles/${vehicleId}`)
+    return data
+  } catch {
+    return null
+  }
+}

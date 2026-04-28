@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
-const { mockFetchAdminBookings } = vi.hoisted(() => ({
+const { mockFetchAdminBookings, mockUpdateBookingStatus } = vi.hoisted(() => ({
   mockFetchAdminBookings: vi.fn(),
+  mockUpdateBookingStatus: vi.fn(),
 }))
 
 vi.mock('../../lib/adminApi', () => ({
   fetchAdminBookings: mockFetchAdminBookings,
+  updateBookingStatus: mockUpdateBookingStatus,
 }))
 
 import AdminReservationsPage from './AdminReservationsPage'
@@ -16,6 +18,8 @@ describe('AdminReservationsPage', () => {
   beforeEach(() => {
     mockFetchAdminBookings.mockReset()
     mockFetchAdminBookings.mockResolvedValue(null)
+    mockUpdateBookingStatus.mockReset()
+    mockUpdateBookingStatus.mockResolvedValue(null)
     vi.spyOn(window, 'alert').mockImplementation(() => {})
   })
 
@@ -184,9 +188,11 @@ describe('AdminReservationsPage', () => {
     })
 
     const confirmBtns = screen.getAllByText('Confirm')
-    fireEvent.click(confirmBtns[0])
+    await act(async () => {
+      fireEvent.click(confirmBtns[0])
+    })
 
-    expect(window.alert).toHaveBeenCalledWith('Reservation status updated to: confirmed')
+    expect(mockUpdateBookingStatus).toHaveBeenCalled()
   })
 
   it('handles start rental action', async () => {
@@ -195,9 +201,11 @@ describe('AdminReservationsPage', () => {
     })
 
     const startBtns = screen.getAllByText('Start Rental')
-    fireEvent.click(startBtns[0])
+    await act(async () => {
+      fireEvent.click(startBtns[0])
+    })
 
-    expect(window.alert).toHaveBeenCalledWith('Reservation status updated to: active')
+    expect(mockUpdateBookingStatus).toHaveBeenCalled()
   })
 
   it('handles complete action', async () => {
@@ -206,9 +214,11 @@ describe('AdminReservationsPage', () => {
     })
 
     const completeBtns = screen.getAllByText('Complete')
-    fireEvent.click(completeBtns[0])
+    await act(async () => {
+      fireEvent.click(completeBtns[0])
+    })
 
-    expect(window.alert).toHaveBeenCalledWith('Reservation status updated to: completed')
+    expect(mockUpdateBookingStatus).toHaveBeenCalled()
   })
 
   it('handles cancel action', async () => {
@@ -216,11 +226,12 @@ describe('AdminReservationsPage', () => {
       renderPage()
     })
 
-    // Multiple Cancel buttons exist in the dropdown menus
     const cancelBtns = screen.getAllByText('Cancel')
-    fireEvent.click(cancelBtns[0])
+    await act(async () => {
+      fireEvent.click(cancelBtns[0])
+    })
 
-    expect(window.alert).toHaveBeenCalledWith('Reservation status updated to: cancelled')
+    expect(mockUpdateBookingStatus).toHaveBeenCalled()
   })
 
   it('shows API bookings when available', async () => {

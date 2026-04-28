@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { fetchAdminBookings, type AdminBookingRow } from '../../lib/adminApi'
+import { fetchAdminBookings, updateBookingStatus, type AdminBookingRow } from '../../lib/adminApi'
 
 interface Reservation {
   id: string
@@ -239,10 +239,16 @@ const AdminReservationsPage: React.FC = () => {
     return reservations.filter(reservation => reservation.status === activeTab)
   }
 
-  const handleStatusChange = (_reservationId: string, newStatus: string) => {
-    // In real app, this would make API call
-    // Update reservation status
-    alert(`Reservation status updated to: ${newStatus}`)
+  const handleStatusChange = async (reservationId: string, newStatus: string) => {
+    const result = await updateBookingStatus(reservationId, newStatus)
+    const updatedStatus = result?.booking?.status ?? newStatus
+    setReservations(prev =>
+      prev.map(r =>
+        r.id === reservationId
+          ? { ...r, status: updatedStatus as Reservation['status'] }
+          : r,
+      ),
+    )
   }
 
   const handleViewDetails = (reservation: Reservation) => {

@@ -1,5 +1,11 @@
-import React, { useEffect, useState } from 'react'
-import { fetchAdminVehicles, type AdminVehicleRow } from '../../lib/adminApi'
+import React, { useEffect, useRef, useState } from 'react'
+import {
+  fetchAdminVehicles,
+  addAdminVehicle,
+  updateAdminVehicle,
+  deleteAdminVehicle,
+  type AdminVehicleRow,
+} from '../../lib/adminApi'
 
 interface Vehicle {
   id: string
@@ -62,6 +68,7 @@ const AdminFleetPage: React.FC = () => {
   const [showVehicleDetails, setShowVehicleDetails] = useState(false)
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterCategory, setFilterCategory] = useState('all')
+  const addFormRef = useRef<HTMLFormElement>(null)
 
   const MOCK_FLEET: Vehicle[] = [
     {
@@ -270,6 +277,49 @@ const AdminFleetPage: React.FC = () => {
 
   const handleAddVehicle = () => {
     setShowAddVehicle(true)
+  }
+
+  const handleSaveNewVehicle = async () => {
+    const form = addFormRef.current
+    if (!form) return
+    const get = (name: string) => (form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement)?.value ?? ''
+    const payload: Omit<AdminVehicleRow, 'id'> = {
+      make: get('make'),
+      model: get('model'),
+      year: Number(get('year')) || new Date().getFullYear(),
+      licensePlate: get('licensePlate'),
+      status: 'available',
+      mileage: Number(get('mileage')) || 0,
+      dailyRate: Number(get('dailyRate')) || 0,
+      location: get('location'),
+    }
+    const result = await addAdminVehicle(payload)
+    const newVehicle = result?.vehicle
+      ? mapApiVehicle(result.vehicle)
+      : {
+          ...mapApiVehicle({ id: crypto.randomUUID(), ...payload }),
+          category: (get('category') || 'midsize') as Vehicle['category'],
+        }
+    setFleet(prev => [...prev, newVehicle])
+    setShowAddVehicle(false)
+  }
+
+  const handleEditVehicle = async (vehicle: Vehicle) => {
+    const newRate = prompt('New daily rate:', String(vehicle.dailyRate))
+    if (newRate === null) return
+    const updates: Partial<AdminVehicleRow> = { dailyRate: Number(newRate) }
+    const result = await updateAdminVehicle(vehicle.id, updates)
+    const updatedRate = result?.vehicle?.dailyRate ?? Number(newRate)
+    setFleet(prev =>
+      prev.map(v => (v.id === vehicle.id ? { ...v, dailyRate: updatedRate } : v)),
+    )
+  }
+
+  const handleDeleteVehicle = async (vehicleId: string) => {
+    if (!confirm('Are you sure you want to delete this vehicle?')) return
+    await deleteAdminVehicle(vehicleId)
+    setFleet(prev => prev.filter(v => v.id !== vehicleId))
+    setShowVehicleDetails(false)
   }
 
   const formatDate = (dateString: string) => {
@@ -494,7 +544,10 @@ const AdminFleetPage: React.FC = () => {
                     >
                       View Details
                     </button>
-                    <button className="btn-small btn-secondary">
+                    <button
+                      className="btn-small btn-secondary"
+                      onClick={() => handleEditVehicle(vehicle)}
+                    >
                       Edit
                     </button>
                   </div>
@@ -672,8 +725,9 @@ const AdminFleetPage: React.FC = () => {
                 </div>
 
                 <div className="modal-actions">
-                  <button className="btn btn-secondary">Edit Vehicle</button>
+                  <button className="btn btn-secondary" onClick={() => handleEditVehicle(selectedVehicle)}>Edit Vehicle</button>
                   <button className="btn btn-secondary">Schedule Maintenance</button>
+                  <button className="btn btn-danger" onClick={() => handleDeleteVehicle(selectedVehicle.id)}>Delete Vehicle</button>
                   <button className="btn btn-primary">Update Status</button>
                 </div>
               </div>
@@ -696,41 +750,41 @@ const AdminFleetPage: React.FC = () => {
               </div>
               
               <div className="modal-body">
-                <form className="add-vehicle-form">
+                <form className="add-vehicle-form" ref={addFormRef}>
                   <div className="form-row">
                     <div className="form-group">
                       <label>Make *</label>
-                      <input type="text" placeholder="e.g., Toyota" />
+                      <input type="text" name="make" placeholder="e.g., Toyota" />
                     </div>
                     <div className="form-group">
                       <label>Model *</label>
-                      <input type="text" placeholder="e.g., Camry" />
+                      <input type="text" name="model" placeholder="e.g., Camry" />
                     </div>
                     <div className="form-group">
                       <label>Year *</label>
-                      <input type="number" placeholder="2023" />
+                      <input type="number" name="year" placeholder="2023" />
                     </div>
                   </div>
                   
                   <div className="form-row">
                     <div className="form-group">
                       <label>License Plate *</label>
-                      <input type="text" placeholder="ABC-1234" />
+                      <input type="text" name="licensePlate" placeholder="ABC-1234" />
                     </div>
                     <div className="form-group">
                       <label>VIN *</label>
-                      <input type="text" placeholder="Vehicle Identification Number" />
+                      <input type="text" name="vin" placeholder="Vehicle Identification Number" />
                     </div>
                     <div className="form-group">
                       <label>Color</label>
-                      <input type="text" placeholder="e.g., Pearl White" />
+                      <input type="text" name="color" placeholder="e.g., Pearl White" />
                     </div>
                   </div>
                   
                   <div className="form-row">
                     <div className="form-group">
                       <label>Category *</label>
-                      <select>
+                      <select name="category">
                         <option value="">Select Category</option>
                         <option value="economy">Economy</option>
                         <option value="compact">Compact</option>
@@ -743,18 +797,18 @@ const AdminFleetPage: React.FC = () => {
                     </div>
                     <div className="form-group">
                       <label>Daily Rate *</label>
-                      <input type="number" placeholder="89" />
+                      <input type="number" name="dailyRate" placeholder="89" />
                     </div>
                     <div className="form-group">
                       <label>Current Mileage</label>
-                      <input type="number" placeholder="0" />
+                      <input type="number" name="mileage" placeholder="0" />
                     </div>
                   </div>
                   
                   <div className="form-row">
                     <div className="form-group">
                       <label>Location *</label>
-                      <select>
+                      <select name="location">
                         <option value="">Select Location</option>
                         <option value="Downtown Office">Downtown Office</option>
                         <option value="Airport">Airport</option>
@@ -763,11 +817,11 @@ const AdminFleetPage: React.FC = () => {
                     </div>
                     <div className="form-group">
                       <label>Purchase Date</label>
-                      <input type="date" />
+                      <input type="date" name="purchaseDate" />
                     </div>
                     <div className="form-group">
                       <label>Purchase Price</label>
-                      <input type="number" placeholder="45000" />
+                      <input type="number" name="purchasePrice" placeholder="45000" />
                     </div>
                   </div>
                 </form>
@@ -776,7 +830,7 @@ const AdminFleetPage: React.FC = () => {
                   <button className="btn btn-secondary" onClick={() => setShowAddVehicle(false)}>
                     Cancel
                   </button>
-                  <button className="btn btn-primary">
+                  <button className="btn btn-primary" onClick={handleSaveNewVehicle}>
                     Add Vehicle
                   </button>
                 </div>

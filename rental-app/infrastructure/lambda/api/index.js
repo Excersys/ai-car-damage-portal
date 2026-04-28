@@ -2786,6 +2786,153 @@ const handlers = {
     }
   },
 
+  // Update booking/reservation status
+  'PATCH /admin/bookings/{id}': async (event) => {
+    try {
+      const userInfo = await handlers.getAdminUserInfo(event);
+      if (!handlers.verifyAdminRole(userInfo.attributes, 'agent')) {
+        return createResponse(403, { error: 'Agent access required' });
+      }
+
+      const bookingId = event.pathParameters?.id;
+      const body = JSON.parse(event.body || '{}');
+      const { status, notes } = body;
+
+      if (!bookingId || !status) {
+        return createResponse(400, { error: 'Booking ID and status are required' });
+      }
+
+      const validStatuses = ['confirmed', 'active', 'completed', 'cancelled', 'no-show'];
+      if (!validStatuses.includes(status)) {
+        return createResponse(400, { error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+      }
+
+      const row = await dbQuery(
+        `UPDATE reservations SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+        [status, bookingId]
+      );
+
+      if (row && row.length > 0) {
+        return createResponse(200, {
+          message: 'Booking status updated',
+          booking: { id: row[0].id, status: row[0].status, updatedAt: row[0].updated_at }
+        });
+      }
+
+      return createResponse(200, {
+        message: 'Booking status updated (mock)',
+        booking: { id: bookingId, status, updatedAt: new Date().toISOString(), notes }
+      });
+    } catch (error) {
+      console.error('Error updating booking:', error);
+      return createResponse(500, { error: 'Failed to update booking', message: error.message });
+    }
+  },
+
+  // Add new vehicle
+  'POST /admin/vehicles': async (event) => {
+    try {
+      const userInfo = await handlers.getAdminUserInfo(event);
+      if (!handlers.verifyAdminRole(userInfo.attributes, 'fleet-manager')) {
+        return createResponse(403, { error: 'Fleet Manager access required' });
+      }
+
+      const body = JSON.parse(event.body || '{}');
+      const { make, model, year, vin, licensePlate, color, status: vehicleStatus, imageUrl } = body;
+
+      if (!make || !model || !year) {
+        return createResponse(400, { error: 'Make, model, and year are required' });
+      }
+
+      const vehicleId = `VH_${Date.now()}`;
+      const row = await dbQuery(
+        `INSERT INTO cars (id, make, model, year, vin, license_plate, color, status, image_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+        [vehicleId, make, model, year, vin || '', licensePlate || '', color || '', vehicleStatus || 'Available', imageUrl || '']
+      );
+
+      const vehicle = row && row.length > 0
+        ? { id: row[0].id, make: row[0].make, model: row[0].model, year: row[0].year, status: row[0].status }
+        : { id: vehicleId, make, model, year, vin, licensePlate, color, status: vehicleStatus || 'Available' };
+
+      return createResponse(201, { message: 'Vehicle added', vehicle });
+    } catch (error) {
+      console.error('Error adding vehicle:', error);
+      return createResponse(500, { error: 'Failed to add vehicle', message: error.message });
+    }
+  },
+
+  // Update vehicle
+  'PUT /admin/vehicles/{id}': async (event) => {
+    try {
+      const userInfo = await handlers.getAdminUserInfo(event);
+      if (!handlers.verifyAdminRole(userInfo.attributes, 'fleet-manager')) {
+        return createResponse(403, { error: 'Fleet Manager access required' });
+      }
+
+      const vehicleId = event.pathParameters?.id;
+      const body = JSON.parse(event.body || '{}');
+
+      if (!vehicleId) {
+        return createResponse(400, { error: 'Vehicle ID is required' });
+      }
+
+      const fields = [];
+      const values = [];
+      let idx = 1;
+      for (const [key, val] of Object.entries(body)) {
+        const colMap = { make: 'make', model: 'model', year: 'year', vin: 'vin',
+          licensePlate: 'license_plate', color: 'color', status: 'status', imageUrl: 'image_url', mileage: 'mileage' };
+        if (colMap[key]) {
+          fields.push(`${colMap[key]} = $${idx}`);
+          values.push(val);
+          idx++;
+        }
+      }
+
+      if (fields.length === 0) {
+        return createResponse(400, { error: 'No valid fields to update' });
+      }
+
+      values.push(vehicleId);
+      const row = await dbQuery(
+        `UPDATE cars SET ${fields.join(', ')}, updated_at = NOW() WHERE id = $${idx} RETURNING *`,
+        values
+      );
+
+      if (row && row.length > 0) {
+        return createResponse(200, { message: 'Vehicle updated', vehicle: row[0] });
+      }
+
+      return createResponse(200, { message: 'Vehicle updated (mock)', vehicle: { id: vehicleId, ...body } });
+    } catch (error) {
+      console.error('Error updating vehicle:', error);
+      return createResponse(500, { error: 'Failed to update vehicle', message: error.message });
+    }
+  },
+
+  // Delete/retire vehicle
+  'DELETE /admin/vehicles/{id}': async (event) => {
+    try {
+      const userInfo = await handlers.getAdminUserInfo(event);
+      if (!handlers.verifyAdminRole(userInfo.attributes, 'fleet-manager')) {
+        return createResponse(403, { error: 'Fleet Manager access required' });
+      }
+
+      const vehicleId = event.pathParameters?.id;
+      if (!vehicleId) {
+        return createResponse(400, { error: 'Vehicle ID is required' });
+      }
+
+      await dbQuery(`UPDATE cars SET status = 'Retired', updated_at = NOW() WHERE id = $1`, [vehicleId]);
+
+      return createResponse(200, { message: 'Vehicle retired', vehicleId });
+    } catch (error) {
+      console.error('Error retiring vehicle:', error);
+      return createResponse(500, { error: 'Failed to retire vehicle', message: error.message });
+    }
+  },
+
   // Financial Analytics (Fleet Manager and above)
   'GET /admin/analytics/financial': async (event) => {
     try {
@@ -3012,7 +3159,40 @@ exports.handler = async (event, context) => {
     console.log('User:', authResult.user ? authResult.user.sub : 'public');
 
     // Find handler
-    const handler = handlers[routeKey];
+    let handler = handlers[routeKey];
+
+    // If no exact match, try parameterized routes
+    if (!handler) {
+      const paramRoutes = Object.keys(handlers).filter(k => k.includes('{'));
+      for (const route of paramRoutes) {
+        const [routeMethod, ...routePathParts] = route.split(' ');
+        const routePath = routePathParts.join(' ');
+        if (routeMethod !== method) continue;
+
+        const routeSegments = routePath.split('/');
+        const pathSegments = path.split('/');
+        if (routeSegments.length !== pathSegments.length) continue;
+
+        let match = true;
+        const params = {};
+        for (let i = 0; i < routeSegments.length; i++) {
+          if (routeSegments[i].startsWith('{') && routeSegments[i].endsWith('}')) {
+            const paramName = routeSegments[i].slice(1, -1);
+            params[paramName] = pathSegments[i];
+          } else if (routeSegments[i] !== pathSegments[i]) {
+            match = false;
+            break;
+          }
+        }
+
+        if (match) {
+          event.pathParameters = { ...event.pathParameters, ...params };
+          handler = handlers[route];
+          break;
+        }
+      }
+    }
+
     if (!handler) {
       return createResponse(404, { error: 'Route not found', route: routeKey });
     }

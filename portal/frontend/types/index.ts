@@ -55,3 +55,15 @@ export interface ScanEvent {
   qcNotes?: string;
 }
 
+export interface DamageCharge {
+  id: string;
+  scanId: string;
+  reservationId: string;
+  amount: number;
+  currency: string;
+  description: string;
+  status: 'pending' | 'charged' | 'failed' | 'waived';
+  createdBy: string;
+  createdAt: string;
+}
+

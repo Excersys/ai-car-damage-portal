@@ -76,12 +76,16 @@ api = ApiStack(
     env=cdk_env,
 )
 
+sagemaker_endpoint = app.node.try_get_context("sagemakerEndpointName")
+
 MonitoringStack(
     app,
     f"TunnelMonitoring-{env_name}",
     env_name=env_name,
     inference_lambda=inference.damage_detection_fn,
     review_lambda=api.review_fn,
+    sagemaker_endpoint_name=sagemaker_endpoint,
+    events_table=storage.events_table,
     env=cdk_env,
 )
 

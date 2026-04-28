@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import PaymentForm from '../components/PaymentForm'
 import VeriffVerification from '../components/VeriffVerification'
+import AgreementStep, { type SignatureData } from '../components/AgreementStep'
 import { fetchCarById } from '../lib/vehicleApi'
 import { apiClient } from '../config/api'
 
@@ -82,6 +83,9 @@ const BookingFormPage: React.FC = () => {
   // Insurance and additional options
   const [selectedInsurance, setSelectedInsurance] = useState<string>('')
   const [additionalOptions, setAdditionalOptions] = useState<string[]>([])
+
+  // Agreement signature
+  const [agreementSignature, setAgreementSignature] = useState<SignatureData | null>(null)
   
   // Mock car data if not provided via state
   const mockCars: { [key: string]: Car } = {
@@ -172,14 +176,18 @@ const BookingFormPage: React.FC = () => {
   }, [currentStep, verificationCompleted])
 
   const handleNextStep = () => {
-    // Gate: cannot proceed to payment (step 5) without completed verification
     if (currentStep === 4 && !verificationSessionId) {
-      alert('Identity verification is required before proceeding to payment.')
+      alert('Identity verification is required before proceeding.')
       return
     }
-    if (currentStep < 5) {
+    if (currentStep < 6) {
       setCurrentStep(currentStep + 1)
     }
+  }
+
+  const handleAgreementComplete = (signatureData: SignatureData) => {
+    setAgreementSignature(signatureData)
+    setCurrentStep(6)
   }
 
   const handlePreviousStep = () => {
@@ -379,8 +387,12 @@ const BookingFormPage: React.FC = () => {
               <span className="step-number">{currentStep > 4 ? '✓' : '4'}</span>
               <span className="step-label">Insurance & Options</span>
             </div>
-            <div className={`progress-step ${currentStep === 5 ? 'active' : ''}`}>
-              <span className="step-number">5</span>
+            <div className={`progress-step ${currentStep > 5 ? 'completed' : currentStep === 5 ? 'active' : ''}`}>
+              <span className="step-number">{currentStep > 5 ? '✓' : '5'}</span>
+              <span className="step-label">Rental Agreement</span>
+            </div>
+            <div className={`progress-step ${currentStep === 6 ? 'active' : ''}`}>
+              <span className="step-number">6</span>
               <span className="step-label">Payment</span>
             </div>
           </div>
@@ -672,8 +684,26 @@ const BookingFormPage: React.FC = () => {
               </div>
             )}
 
-            {/* Step 5: Payment */}
+            {/* Step 5: Rental Agreement */}
             {currentStep === 5 && (
+              <AgreementStep
+                agreementData={{
+                  renterName: `${userInfo.firstName} ${userInfo.lastName}`.trim() || 'Renter',
+                  pickupDate: bookingDetails.pickupDate,
+                  dropoffDate: bookingDetails.dropoffDate,
+                  vehicleMake: car.make,
+                  vehicleModel: car.model,
+                  vehicleYear: car.year,
+                  insuranceSelection: insuranceOptions.find(opt => opt.id === selectedInsurance)?.name || 'None',
+                  dailyRate: car.price,
+                  totalDays: calculateDays(),
+                }}
+                onComplete={handleAgreementComplete}
+              />
+            )}
+
+            {/* Step 6: Payment */}
+            {currentStep === 6 && (
               <PaymentForm
                 bookingData={{
                   car,
@@ -705,14 +735,14 @@ const BookingFormPage: React.FC = () => {
                 <button className="btn btn-primary" onClick={handleNextStep}>
                   {currentStep === 1 ? 'Continue to Verification' : 
                    currentStep === 3 ? 'Continue' : 
-                   currentStep === 4 ? 'Continue to Payment' : 'Continue'}
+                   currentStep === 4 ? 'Continue to Agreement' : 'Continue'}
                 </button>
               </div>
             )}
           </div>
 
           {/* Sidebar with price breakdown */}
-          {currentStep < 5 && (
+          {currentStep < 6 && (
             <div className="booking-sidebar">
               <div className="price-summary">
                 <h3>Booking Summary</h3>

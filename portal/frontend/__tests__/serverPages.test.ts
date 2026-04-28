@@ -21,12 +21,24 @@ describe("app/page.tsx (Dashboard)", () => {
     expect(src).toContain("getScans()");
   });
 
-  it("computes pendingReviews count", () => {
+  it("fetches tunnel scans alongside DB scans", () => {
+    expect(src).toContain("getTunnelScans()");
+    expect(src).toContain("Promise.all");
+  });
+
+  it("merges and sorts scans by timestamp descending", () => {
+    expect(src).toContain("dbScans");
+    expect(src).toContain("tunnelScans");
+    expect(src).toContain("sort");
+    expect(src).toContain("b.timestamp");
+  });
+
+  it("computes pendingReviews count from merged list", () => {
     expect(src).toContain("pendingReviews");
     expect(src).toContain("qcStatus === 'Pending'");
   });
 
-  it("computes damageDetected count", () => {
+  it("computes damageDetected count from merged list", () => {
     expect(src).toContain("damageDetected");
     expect(src).toContain("aiStatus === 'Damage Detected'");
   });
@@ -127,14 +139,24 @@ describe("app/inspections/[id]/page.tsx", () => {
     expect(src).toMatch(/export\s+default\s+async\s+function/);
   });
 
-  it("gets scan and car data", () => {
+  it("checks for tunnel scan IDs before fetching", () => {
+    expect(src).toContain("isTunnelScanId");
+    expect(src).toContain("getTunnelScanDetail");
+  });
+
+  it("falls back to DB fetch for non-tunnel IDs", () => {
     expect(src).toContain("getScanById");
     expect(src).toContain("getCarById");
   });
 
-  it("handles not-found cases", () => {
+  it("handles not-found cases for both sources", () => {
+    expect(src).toContain("Tunnel record not found");
     expect(src).toContain("Record not found");
     expect(src).toContain("Car not found");
+  });
+
+  it("uses 'tunnel' as carId for tunnel events", () => {
+    expect(src).toContain('carId="tunnel"');
   });
 
   it("renders InspectionDetailClient", () => {

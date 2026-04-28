@@ -30,6 +30,8 @@ import {
   getScanById,
   getScansByCarId,
   updateQCStatus,
+  createDamageCharge,
+  getDamageChargesByScanId,
   searchGlobal,
 } from "@/lib/actions";
 import { revalidatePath } from "next/cache";
@@ -310,6 +312,68 @@ describe("updateQCStatus", () => {
       expect.stringContaining("UPDATE scans"),
       ["Rejected", "reviewer-2", "s2"]
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createDamageCharge
+// ---------------------------------------------------------------------------
+describe("createDamageCharge", () => {
+  it("inserts a damage charge and returns the row", async () => {
+    const returned = {
+      id: mockUUID,
+      scanId: "scan-001",
+      reservationId: "res-001",
+      amount: 35000,
+      currency: "usd",
+      description: "Front bumper scratch",
+      status: "pending",
+      createdBy: "admin@acr.com",
+      createdAt: new Date().toISOString(),
+    };
+    mockQuery.mockResolvedValueOnce({ rows: [returned] });
+
+    const result = await createDamageCharge({
+      scanId: "scan-001",
+      reservationId: "res-001",
+      amount: 35000,
+      description: "Front bumper scratch",
+      createdBy: "admin@acr.com",
+    });
+
+    expect(result).toEqual(returned);
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("INSERT INTO damage_charges"),
+      [mockUUID, "scan-001", "res-001", 35000, "Front bumper scratch", "admin@acr.com"]
+    );
+    expect(revalidatePath).toHaveBeenCalledWith("/qc");
+    expect(revalidatePath).toHaveBeenCalledWith("/qc/scan-001");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getDamageChargesByScanId
+// ---------------------------------------------------------------------------
+describe("getDamageChargesByScanId", () => {
+  it("returns charges for a given scan", async () => {
+    const rows = [
+      { id: "chg-1", scanId: "scan-001", amount: 35000, status: "pending" },
+      { id: "chg-2", scanId: "scan-001", amount: 8500, status: "pending" },
+    ];
+    mockQuery.mockResolvedValueOnce({ rows });
+
+    const result = await getDamageChargesByScanId("scan-001");
+    expect(result).toEqual(rows);
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("FROM damage_charges"),
+      ["scan-001"]
+    );
+  });
+
+  it("returns empty array when no charges exist", async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    const result = await getDamageChargesByScanId("scan-none");
+    expect(result).toEqual([]);
   });
 });
 

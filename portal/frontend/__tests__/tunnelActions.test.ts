@@ -257,6 +257,160 @@ describe("getTunnelScanDetail", () => {
   });
 });
 
+describe("getTunnelScans – dashboard merge scenarios", () => {
+  it("returns properly shaped ScanEvent[] with all required fields", async () => {
+    mockIsTunnelConfigured.mockReturnValue(true);
+    mockFetchTunnelEvents.mockResolvedValue({
+      events: [
+        {
+          event_id: "merge1",
+          license_plate: "MERGE-1",
+          last_timestamp: "2024-06-01T12:00:00Z",
+          any_damage: true,
+          preview_image_url: "http://img.jpg",
+          qc_status: "pending",
+          camera_count: 4,
+        },
+      ],
+      count: 1,
+    });
+
+    const result = await getTunnelScans();
+    expect(result).toHaveLength(1);
+
+    const scan = result[0];
+    expect(scan).toHaveProperty("id");
+    expect(scan).toHaveProperty("carId");
+    expect(scan).toHaveProperty("timestamp");
+    expect(scan).toHaveProperty("type");
+    expect(scan).toHaveProperty("aiStatus");
+    expect(scan).toHaveProperty("imageUrls");
+    expect(scan).toHaveProperty("detectedDamage");
+    expect(scan).toHaveProperty("qcStatus");
+    expect(scan.imageUrls).toHaveProperty("front");
+    expect(scan.imageUrls).toHaveProperty("rear");
+    expect(scan.imageUrls).toHaveProperty("left");
+    expect(scan.imageUrls).toHaveProperty("right");
+  });
+
+  it("returns empty array when tunnel is not configured (graceful degradation)", async () => {
+    mockIsTunnelConfigured.mockReturnValue(false);
+    const result = await getTunnelScans();
+    expect(result).toEqual([]);
+    expect(mockFetchTunnelEvents).not.toHaveBeenCalled();
+  });
+
+  it("returns empty array on network failure (graceful degradation)", async () => {
+    mockIsTunnelConfigured.mockReturnValue(true);
+    mockFetchTunnelEvents.mockRejectedValue(new Error("timeout"));
+    const consoleSpy = jest.spyOn(console, "error").mockImplementation();
+
+    const result = await getTunnelScans();
+    expect(result).toEqual([]);
+    consoleSpy.mockRestore();
+  });
+
+  it("returns empty array when tunnel API returns zero events", async () => {
+    mockIsTunnelConfigured.mockReturnValue(true);
+    mockFetchTunnelEvents.mockResolvedValue({ events: [], count: 0 });
+
+    const result = await getTunnelScans();
+    expect(result).toEqual([]);
+  });
+
+  it("produces ScanEvents that can be sorted alongside DB scans by timestamp", async () => {
+    mockIsTunnelConfigured.mockReturnValue(true);
+    mockFetchTunnelEvents.mockResolvedValue({
+      events: [
+        {
+          event_id: "t1",
+          license_plate: "T1",
+          last_timestamp: "2024-06-15T10:00:00Z",
+          any_damage: false,
+          preview_image_url: "",
+          qc_status: "approved",
+          camera_count: 2,
+        },
+        {
+          event_id: "t2",
+          license_plate: "T2",
+          last_timestamp: "2024-06-10T08:00:00Z",
+          any_damage: true,
+          preview_image_url: "",
+          qc_status: "pending",
+          camera_count: 4,
+        },
+      ],
+      count: 2,
+    });
+
+    const tunnelScans = await getTunnelScans();
+
+    const dbScans = [
+      {
+        id: "db1",
+        carId: "car1",
+        timestamp: "2024-06-12T09:00:00Z",
+        type: "Check-In" as const,
+        aiStatus: "Clean" as const,
+        imageUrls: { front: "", rear: "", left: "", right: "" },
+        detectedDamage: [],
+        qcStatus: "Approved" as const,
+      },
+    ];
+
+    const merged = [...dbScans, ...tunnelScans].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+    );
+
+    expect(merged).toHaveLength(3);
+    expect(merged[0].id).toBe("tunnel-t1");
+    expect(merged[1].id).toBe("db1");
+    expect(merged[2].id).toBe("tunnel-t2");
+  });
+
+  it("contributes to KPI counts when merged with DB scans", async () => {
+    mockIsTunnelConfigured.mockReturnValue(true);
+    mockFetchTunnelEvents.mockResolvedValue({
+      events: [
+        {
+          event_id: "kpi1",
+          license_plate: "KPI",
+          last_timestamp: "2024-06-15T10:00:00Z",
+          any_damage: true,
+          preview_image_url: "",
+          qc_status: "pending",
+          camera_count: 4,
+        },
+      ],
+      count: 1,
+    });
+
+    const tunnelScans = await getTunnelScans();
+    const dbScans = [
+      {
+        id: "db1",
+        carId: "car1",
+        timestamp: "2024-06-12T09:00:00Z",
+        type: "Check-In" as const,
+        aiStatus: "Damage Detected" as const,
+        imageUrls: { front: "", rear: "", left: "", right: "" },
+        detectedDamage: [],
+        qcStatus: "Approved" as const,
+      },
+    ];
+
+    const allScans = [...dbScans, ...tunnelScans];
+    const pendingReviews = allScans.filter((s) => s.qcStatus === "Pending").length;
+    const damageDetected = allScans.filter((s) => s.aiStatus === "Damage Detected").length;
+    const totalScans = allScans.length;
+
+    expect(totalScans).toBe(2);
+    expect(pendingReviews).toBe(1);
+    expect(damageDetected).toBe(2);
+  });
+});
+
 describe("submitTunnelQc", () => {
   it("returns false when tunnel is not configured", async () => {
     mockIsTunnelConfigured.mockReturnValue(false);

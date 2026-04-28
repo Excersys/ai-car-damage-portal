@@ -53,6 +53,16 @@ vi.mock('../components/VeriffVerification', () => ({
   ),
 }))
 
+vi.mock('../components/AgreementStep', () => ({
+  default: ({ onComplete }: any) => (
+    <div data-testid="agreement-step">
+      <button onClick={() => onComplete({ agreed: true, typedSignature: 'Test Renter', signedAt: new Date().toISOString() })}>
+        Sign Agreement
+      </button>
+    </div>
+  ),
+}))
+
 import BookingFormPage from './BookingFormPage'
 
 describe('BookingFormPage', () => {
@@ -137,6 +147,7 @@ describe('BookingFormPage', () => {
       expect(screen.getByText('Verification')).toBeInTheDocument()
       expect(screen.getByText('Your Information')).toBeInTheDocument()
       expect(screen.getByText('Insurance & Options')).toBeInTheDocument()
+      expect(screen.getByText('Rental Agreement')).toBeInTheDocument()
       expect(screen.getByText('Payment')).toBeInTheDocument()
     })
   })
@@ -242,7 +253,11 @@ describe('BookingFormPage', () => {
       await waitFor(() => screen.getByText('Choose Your Protection'))
     }
     if (step >= 5) {
-      fireEvent.click(screen.getByText('Continue to Payment'))
+      fireEvent.click(screen.getByText('Continue to Agreement'))
+      await waitFor(() => screen.getByTestId('agreement-step'))
+    }
+    if (step >= 6) {
+      fireEvent.click(screen.getByText('Sign Agreement'))
       await waitFor(() => screen.getByTestId('payment-form'))
     }
   }
@@ -283,7 +298,7 @@ describe('BookingFormPage', () => {
     })
   })
 
-  it('blocks advancing to step 5 without verification session', async () => {
+  it('blocks advancing past step 4 without verification session', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
     renderBookingForm()
     await waitFor(() => screen.getByText('Continue to Verification'))
@@ -296,13 +311,13 @@ describe('BookingFormPage', () => {
     alertSpy.mockRestore()
   })
 
-  it('navigates to step 5 (payment) with verification', async () => {
-    await navigateToStep(5)
+  it('navigates to step 6 (payment) with verification', async () => {
+    await navigateToStep(6)
     expect(screen.getByTestId('payment-form')).toBeInTheDocument()
   })
 
   it('completes payment and navigates to confirmation', async () => {
-    await navigateToStep(5)
+    await navigateToStep(6)
 
     fireEvent.click(screen.getByText('Complete Payment'))
 
@@ -321,7 +336,7 @@ describe('BookingFormPage', () => {
   it('handles booking API failure gracefully', async () => {
     mockPost.mockRejectedValueOnce(new Error('API down'))
 
-    await navigateToStep(5)
+    await navigateToStep(6)
 
     fireEvent.click(screen.getByText('Complete Payment'))
 
@@ -347,13 +362,13 @@ describe('BookingFormPage', () => {
     })
   })
 
-  it('handles cancel payment (goes back to step 4)', async () => {
-    await navigateToStep(5)
+  it('handles cancel payment (goes back to step 5 agreement)', async () => {
+    await navigateToStep(6)
 
     fireEvent.click(screen.getByText('Cancel Payment'))
 
     await waitFor(() => {
-      expect(screen.getByText('Choose Your Protection')).toBeInTheDocument()
+      expect(screen.getByTestId('agreement-step')).toBeInTheDocument()
     })
   })
 

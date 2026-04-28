@@ -175,6 +175,9 @@ class EzCarRentalInfrastructureStack extends cdk.Stack {
                     mutable: true,
                 },
             },
+            customAttributes: {
+                'role': new cognito.StringAttribute({ mutable: true, minLen: 1, maxLen: 20 }),
+            },
             passwordPolicy: {
                 minLength: 8,
                 requireLowercase: true,

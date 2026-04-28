@@ -2,10 +2,10 @@
 
 import { Car, ScanEvent } from "@/types";
 import { useRouter } from "next/navigation";
-import { Check, X, ArrowLeft } from "lucide-react";
+import { Check, X, ArrowLeft, DollarSign } from "lucide-react";
 import Link from "next/link";
 import { useState, useRef, useCallback } from "react";
-import { updateQCStatus } from "@/lib/actions";
+import { updateQCStatus, createDamageCharge } from "@/lib/actions";
 import { useSession } from "next-auth/react";
 
 interface QCReviewClientProps {
@@ -38,6 +38,10 @@ export default function QCReviewClient({ scan, car }: QCReviewClientProps) {
   const { data: session } = useSession();
   const [showOverlay, setShowOverlay] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showChargeForm, setShowChargeForm] = useState(false);
+  const [chargeAmount, setChargeAmount] = useState("");
+  const [chargeDescription, setChargeDescription] = useState("");
+  const [chargeSuccess, setChargeSuccess] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const [imgDims, setImgDims] = useState({ w: 800, h: 600 });
 
@@ -54,9 +58,26 @@ export default function QCReviewClient({ scan, car }: QCReviewClientProps) {
     if (confirm("Confirm Damage? This will generate a report.")) {
       setIsSubmitting(true);
       await updateQCStatus(scan.id, "Approved", session?.user?.email || "unknown");
-      alert("Damage Confirmed! Report generated.");
-      router.push("/qc");
+      setIsSubmitting(false);
+      setShowChargeForm(true);
     }
+  };
+
+  const handleCreateCharge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cents = Math.round(parseFloat(chargeAmount) * 100);
+    if (isNaN(cents) || cents <= 0) return;
+
+    setIsSubmitting(true);
+    await createDamageCharge({
+      scanId: scan.id,
+      reservationId: scan.reservationId || "",
+      amount: cents,
+      description: chargeDescription,
+      createdBy: session?.user?.email || "unknown",
+    });
+    setChargeSuccess(true);
+    setIsSubmitting(false);
   };
 
   const handleReject = async () => {
@@ -149,25 +170,104 @@ export default function QCReviewClient({ scan, car }: QCReviewClientProps) {
         </div>
       </div>
 
-      {/* Action Bar */}
-      <div className="mt-4 pt-4 border-t border-gray-200 flex justify-center gap-4">
-        <button
-          onClick={handleReject}
-          disabled={isSubmitting}
-          className="flex items-center gap-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-bold transition-colors disabled:opacity-50"
-        >
-          <X className="w-5 h-5" />
-          Reject (Dirt/False)
-        </button>
-        <button
-          onClick={handleApprove}
-          disabled={isSubmitting}
-          className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-lg transition-transform hover:scale-105 disabled:opacity-50 disabled:scale-100"
-        >
-          <Check className="w-5 h-5" />
-          Confirm Damage
-        </button>
-      </div>
+      {/* Charge Form (shown after damage confirmation) */}
+      {showChargeForm && (
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          {chargeSuccess ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-lg px-6 py-3">
+                <Check className="w-5 h-5" />
+                <span className="font-semibold">Damage charge created successfully.</span>
+              </div>
+              <button
+                onClick={() => router.push("/qc")}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 underline"
+              >
+                Return to QC queue
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleCreateCharge} className="max-w-md mx-auto space-y-4">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-indigo-600" />
+                Create Damage Charge
+              </h3>
+              <div>
+                <label htmlFor="charge-amount" className="block text-sm font-medium text-gray-700 mb-1">
+                  Amount ($)
+                </label>
+                <input
+                  id="charge-amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  value={chargeAmount}
+                  onChange={(e) => setChargeAmount(e.target.value)}
+                  placeholder="350.00"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="charge-desc" className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  id="charge-desc"
+                  required
+                  value={chargeDescription}
+                  onChange={(e) => setChargeDescription(e.target.value)}
+                  placeholder="Front bumper scratch — 14cm requiring repaint"
+                  rows={2}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="text-xs text-gray-500">
+                Reservation: <span className="font-mono">{scan.reservationId || "N/A"}</span>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => router.push("/qc")}
+                  className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Skip
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-semibold text-sm disabled:opacity-50"
+                >
+                  <DollarSign className="w-4 h-4" />
+                  {isSubmitting ? "Creating…" : "Create Charge"}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      {/* Action Bar (hidden once charge form is shown) */}
+      {!showChargeForm && (
+        <div className="mt-4 pt-4 border-t border-gray-200 flex justify-center gap-4">
+          <button
+            onClick={handleReject}
+            disabled={isSubmitting}
+            className="flex items-center gap-2 px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-bold transition-colors disabled:opacity-50"
+          >
+            <X className="w-5 h-5" />
+            Reject (Dirt/False)
+          </button>
+          <button
+            onClick={handleApprove}
+            disabled={isSubmitting}
+            className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow-lg transition-transform hover:scale-105 disabled:opacity-50 disabled:scale-100"
+          >
+            <Check className="w-5 h-5" />
+            Confirm Damage
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,12 +1,20 @@
 import { getScans } from "@/lib/actions";
+import { getTunnelScans } from "@/lib/actions/tunnel";
 import { Camera, Activity, Clock } from "lucide-react";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
-  const recentScans = await getScans();
-  
+  const [dbScans, tunnelScans] = await Promise.all([
+    getScans(),
+    getTunnelScans(),
+  ]);
+
+  const recentScans = [...dbScans, ...tunnelScans].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
+
   const pendingReviews = recentScans.filter(s => s.qcStatus === 'Pending').length;
   const damageDetected = recentScans.filter(s => s.aiStatus === 'Damage Detected').length;
   const totalScans = recentScans.length;

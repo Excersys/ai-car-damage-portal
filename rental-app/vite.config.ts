@@ -23,7 +23,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
     css: true,
-    exclude: ['**/node_modules/**', '**/infrastructure/**'],
+    exclude: ['**/node_modules/**', '**/infrastructure/lambda/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'text-summary'],

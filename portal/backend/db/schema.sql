@@ -71,5 +71,18 @@ CREATE TABLE payments (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Damage Charges (ACR-128: post-inspection billing)
+CREATE TABLE IF NOT EXISTS damage_charges (
+    id VARCHAR(255) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    scan_id VARCHAR(255) REFERENCES scans(id),
+    reservation_id VARCHAR(255) REFERENCES reservations(id),
+    amount INTEGER NOT NULL,
+    currency VARCHAR(3) DEFAULT 'usd',
+    description TEXT,
+    status VARCHAR(50) DEFAULT 'pending',
+    created_by VARCHAR(255),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Migration: ACR-137 — Add qc_reviewed_at to scans table
 -- ALTER TABLE scans ADD COLUMN qc_reviewed_at TIMESTAMP;

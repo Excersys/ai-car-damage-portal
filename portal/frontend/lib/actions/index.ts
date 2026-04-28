@@ -1,7 +1,7 @@
 "use server";
 
 import { query } from "@/lib/db";
-import { Car, Reservation, ScanEvent, BoundingBox } from "@/types";
+import { Car, Reservation, ScanEvent, BoundingBox, DamageCharge } from "@/types";
 import { revalidatePath } from "next/cache";
 
 // --- Cars ---
@@ -171,6 +171,40 @@ export async function updateQCStatus(scanId: string, status: 'Approved' | 'Rejec
     `, [status, reviewerId, scanId]);
     revalidatePath('/qc');
     revalidatePath(`/qc/${scanId}`);
+}
+
+// --- Damage Charges ---
+
+export async function createDamageCharge(data: {
+  scanId: string;
+  reservationId: string;
+  amount: number;
+  description: string;
+  createdBy: string;
+}): Promise<DamageCharge> {
+  const id = crypto.randomUUID();
+  const res = await query(
+    `INSERT INTO damage_charges (id, scan_id, reservation_id, amount, description, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, scan_id AS "scanId", reservation_id AS "reservationId",
+               amount, currency, description, status, created_by AS "createdBy", created_at AS "createdAt"`,
+    [id, data.scanId, data.reservationId, data.amount, data.description, data.createdBy]
+  );
+
+  revalidatePath("/qc");
+  revalidatePath(`/qc/${data.scanId}`);
+  return res.rows[0];
+}
+
+export async function getDamageChargesByScanId(scanId: string): Promise<DamageCharge[]> {
+  const res = await query(
+    `SELECT id, scan_id AS "scanId", reservation_id AS "reservationId",
+            amount, currency, description, status, created_by AS "createdBy", created_at AS "createdAt"
+     FROM damage_charges WHERE scan_id = $1
+     ORDER BY created_at DESC`,
+    [scanId]
+  );
+  return res.rows;
 }
 
 export async function searchGlobal(queryStr: string) {

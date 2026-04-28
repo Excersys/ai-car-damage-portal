@@ -104,8 +104,9 @@ describe("FleetList", () => {
 
   it("shows status badges", () => {
     render(<FleetList initialCars={mockCars} />);
-    expect(screen.getByText("Available")).toBeInTheDocument();
-    expect(screen.getByText("Rented")).toBeInTheDocument();
-    expect(screen.getByText("Maintenance")).toBeInTheDocument();
+    const badges = screen.getAllByText("Available");
+    expect(badges.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Rented").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Maintenance").length).toBeGreaterThanOrEqual(1);
   });
 });

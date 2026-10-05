@@ -112,6 +112,8 @@ temp/
 # Committed rental-app vehicle thumbnails
 !rental-app/src/images/
 !rental-app/src/images/**
+!rental-app/public/images/
+!rental-app/public/images/**
 
 # --- Model weights & checkpoints ---
 *.onnx

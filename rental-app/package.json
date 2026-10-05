@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "vite",
+    "dev:api": "node infrastructure/local-api-server.js",
     "build": "vite build",
     "preview": "vite preview",
     "test": "jest",

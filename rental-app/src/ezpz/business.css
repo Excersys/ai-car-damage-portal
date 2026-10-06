@@ -1,0 +1,56 @@
+/* sections merged in from the retired /operators page, scoped to .opsmerge */
+.opsmerge .kit{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border-top:3px solid var(--ink)}
+.opsmerge .kit > div{position:relative;padding:34px 28px 36px 0}
+.opsmerge .kit > div + div{border-left:2px dashed rgba(27,29,33,.35);padding-left:28px}
+.opsmerge .kit h3{font-size:clamp(30px,3vw,46px);font-weight:800}
+.opsmerge .kit p{margin-top:14px;color:var(--ink-2);font-size:16px;max-width:34ch}
+.opsmerge .kit .art{margin-top:26px;height:230px}
+.opsmerge .kit .art svg{height:100%;width:auto;max-width:100%}
+.opsmerge .kit .spec{list-style:none;margin:18px 0 0;padding:0;border-top:2px solid var(--ink)}
+.opsmerge .kit .spec li{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid rgba(27,29,33,.18);font-size:14px}
+.opsmerge .kit .spec li b{font-weight:600;white-space:nowrap}
+.opsmerge .kit .spec li span{color:var(--ink-3)}
+.opsmerge .ledger{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0;border:3px solid var(--ink);border-radius:6px;overflow:hidden}
+.opsmerge .ledger > div{padding:34px 34px 38px}
+.opsmerge .ledger .before{background:var(--concrete-2);border-right:3px solid var(--ink)}
+.opsmerge .ledger .after{background:var(--paint)}
+.opsmerge .ledger h3{font-size:clamp(28px,3vw,46px)}
+.opsmerge .ledger ol{list-style:none;margin:28px 0 0;padding:0}
+.opsmerge .ledger li{display:grid;grid-template-columns:1fr auto;gap:14px;padding:14px 0;border-top:1px solid rgba(27,29,33,.18);align-items:baseline;transition:transform .5s var(--ease)}
+.opsmerge .ledger li:hover{transform:translateX(8px)}
+.opsmerge .ledger li b{font-weight:600;font-size:17px}
+.opsmerge .ledger li span{display:block;color:var(--ink-2);font-size:15px;margin-top:3px}
+.opsmerge .ledger li em{font-style:normal;font-family:"Big Shoulders Display",sans-serif;font-weight:800;font-size:30px;letter-spacing:.02em;white-space:nowrap}
+.opsmerge .ledger .before em{color:var(--ink-3)}
+.opsmerge .ledger .before li b{text-decoration:line-through;text-decoration-thickness:2px;text-decoration-color:rgba(27,29,33,.5)}
+.opsmerge .proof{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px;align-items:start}
+.opsmerge .proof .txt h3{font-size:clamp(28px,2.8vw,44px)}
+.opsmerge .proof .txt p{margin-top:16px;color:var(--ink-2);max-width:48ch}
+.opsmerge .proof .steps{margin-top:28px;border-top:2px solid var(--ink)}
+.opsmerge .proof .steps div{display:grid;grid-template-columns:44px 1fr;gap:12px;padding:14px 0;border-bottom:1px solid rgba(27,29,33,.2);font-weight:600}
+.opsmerge .proof .steps div i{font-style:normal;font-family:"Big Shoulders Stencil Display",sans-serif;font-weight:900;font-size:30px;line-height:1;color:var(--ink)}
+.opsmerge .rollout{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:3px solid var(--ink)}
+.opsmerge .rollout > div{position:relative;padding:34px 28px 30px 0}
+.opsmerge .rollout > div + div{border-left:2px dashed rgba(27,29,33,.35);padding-left:28px}
+.opsmerge .rollout .mark{position:absolute;top:-17px;left:-2px;width:32px;height:32px;border-radius:50%;background:var(--paint);box-shadow:0 0 0 6px var(--concrete),0 0 0 8px var(--ink)}
+.opsmerge .rollout .wk{font-family:"Big Shoulders Display",sans-serif;font-weight:700;font-size:40px;line-height:1;letter-spacing:.02em}
+.opsmerge .rollout .wk small{display:block;font-family:"Bricolage Grotesque",sans-serif;font-size:12px;font-weight:600;letter-spacing:.16em;color:var(--ink-3);margin-top:8px;text-transform:uppercase}
+.opsmerge .rollout h3{margin-top:22px;font-size:20px;font-weight:600;line-height:1.25}
+.opsmerge .rollout p{margin-top:10px;color:var(--ink-2);font-size:15px;max-width:30ch}
+@media (max-width:1080px){
+  .opsmerge .kit{grid-template-columns:1fr}
+  .opsmerge .kit > div, .opsmerge .kit > div + div{border-left:0;padding-left:0;padding-right:0;border-top:2px dashed rgba(27,29,33,.35)}
+  .opsmerge .kit > div:first-child{border-top:0}
+  .opsmerge .proof{grid-template-columns:1fr}
+  .opsmerge .rollout{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .opsmerge .rollout > div:nth-child(3){border-left:0;padding-left:0;border-top:2px dashed rgba(27,29,33,.35)}
+  .opsmerge .rollout > div:nth-child(4){border-top:2px dashed rgba(27,29,33,.35)}
+}
+@media (max-width:760px){
+  .opsmerge .ledger{grid-template-columns:1fr}
+  .opsmerge .ledger .before{border-right:0;border-bottom:3px solid var(--ink)}
+  .opsmerge .ledger > div{padding:26px 20px 28px}
+  .opsmerge .rollout{grid-template-columns:1fr}
+  .opsmerge .rollout > div, .opsmerge .rollout > div + div{border-left:0;padding-left:0;padding-right:0;border-top:2px dashed rgba(27,29,33,.35)}
+  .opsmerge .rollout > div:first-child{border-top:0}
+}

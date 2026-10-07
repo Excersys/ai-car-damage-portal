@@ -11,6 +11,8 @@ import {
   writeSearch,
   type EzpzSearch,
 } from './bookSearch'
+import TimeSelect from './TimeSelect'
+import { useIsPhone } from './useIsPhone'
 
 type Variant = 'home' | 'book' | 'cars'
 
@@ -65,6 +67,7 @@ const COPY: Record<Variant, { formClass: string; formId: string; returnLabel: st
  */
 const BookBar: React.FC<Props> = ({ variant, onSearch }) => {
   const navigate = useNavigate()
+  const phone = useIsPhone()
   const copy = COPY[variant]
   const [s, setS] = useState<EzpzSearch>(() => {
     const base = defaultSearch()
@@ -148,16 +151,23 @@ const BookBar: React.FC<Props> = ({ variant, onSearch }) => {
           <span>Pick-up date</span>
           <input type="date" id={ids ? 'bk-d1' : undefined} name="d1" required min={today} value={s.d1} onChange={(e) => onD1(e.target.value)} />
         </label>
-        <label className="bk bk-s">
-          <span>Time</span>
-          <select id={ids ? 'bk-t1' : undefined} name="t1" value={s.t1} onChange={(e) => set({ t1: e.target.value })}>
-            {TIMES.map((t) => (
-              <option key={t.v} value={t.v}>
-                {t.l}
-              </option>
-            ))}
-          </select>
-        </label>
+        {phone ? (
+          <div className="bk bk-s">
+            <span id={`${copy.formId}-t1-label`}>Time</span>
+            <TimeSelect id={ids ? 'bk-t1' : undefined} name="t1" value={s.t1} labelledBy={`${copy.formId}-t1-label`} onChange={(v) => set({ t1: v })} />
+          </div>
+        ) : (
+          <label className="bk bk-s">
+            <span>Time</span>
+            <select id={ids ? 'bk-t1' : undefined} name="t1" value={s.t1} onChange={(e) => set({ t1: e.target.value })}>
+              {TIMES.map((t) => (
+                <option key={t.v} value={t.v}>
+                  {t.l}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="bk bk-s">
           <span>{copy.dateLabel}</span>
           <input
@@ -171,16 +181,23 @@ const BookBar: React.FC<Props> = ({ variant, onSearch }) => {
             onChange={(e) => set({ d2: e.target.value })}
           />
         </label>
-        <label className="bk bk-s">
-          <span>Time</span>
-          <select id={ids ? 'bk-t2' : undefined} name="t2" value={s.t2} onChange={(e) => set({ t2: e.target.value })}>
-            {TIMES.map((t) => (
-              <option key={t.v} value={t.v}>
-                {t.l}
-              </option>
-            ))}
-          </select>
-        </label>
+        {phone ? (
+          <div className="bk bk-s">
+            <span id={`${copy.formId}-t2-label`}>Time</span>
+            <TimeSelect id={ids ? 'bk-t2' : undefined} name="t2" value={s.t2} labelledBy={`${copy.formId}-t2-label`} onChange={(v) => set({ t2: v })} />
+          </div>
+        ) : (
+          <label className="bk bk-s">
+            <span>Time</span>
+            <select id={ids ? 'bk-t2' : undefined} name="t2" value={s.t2} onChange={(e) => set({ t2: e.target.value })}>
+              {TIMES.map((t) => (
+                <option key={t.v} value={t.v}>
+                  {t.l}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button className={copy.buttonClass} type="submit">
           {copy.button} {ARROW}
         </button>

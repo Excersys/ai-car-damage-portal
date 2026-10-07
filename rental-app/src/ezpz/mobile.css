@@ -1,0 +1,96 @@
+/* Phone and tablet fixes layered on top of the design stylesheet (ezpz.css), loaded after it.
+   The static design was only checked on desktop browsers; these rules keep it inside the screen on iPhone Safari
+   and small Android screens without touching the desktop layout. */
+
+/* grid and flex children may shrink below their content width, otherwise one wide input stretches the whole row */
+.bk,.fld,.bookbar-grid > *,.ckfields > *,.cfgrid > *,.ckgrid > *{min-width:0}
+
+@media (max-width:1080px){
+  .bookbar-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+/* iOS Safari gives date and time inputs their own intrinsic width and centres the value; make them behave like text boxes */
+@media (max-width:1080px){
+  input[type="date"],input[type="time"]{
+    -webkit-appearance:none;appearance:none;
+    display:block;width:100%;min-width:0;max-width:100%;margin:0;
+    text-align:left;line-height:1.25;
+  }
+  .bookbar input[type="date"]{height:44px}
+  input[type="date"]::-webkit-date-and-time-value{text-align:left;min-width:0;margin:0}
+  input[type="date"]::-webkit-datetime-edit{padding:0;min-width:0}
+}
+
+@media (max-width:760px){
+  /* 16px stops iOS Safari zooming the page when a field is tapped */
+  .bookbar input,.bookbar select,.fld input,.fld select{font-size:16px}
+  .bookbar select{height:44px}
+}
+
+@media (max-width:520px){
+  .bookbar-grid{grid-template-columns:minmax(0,1fr)}
+  .ckfields{grid-template-columns:minmax(0,1fr)}
+}
+
+/* ---- navigation: the link row does not fit below ~1000px, so it becomes a menu opened by a button ---- */
+.nav-toggle{display:none;position:relative;flex:none;width:46px;height:46px;padding:0;border:2px solid var(--ink);border-radius:4px;background:transparent;cursor:pointer}
+.nav-toggle span,.nav-toggle span::before,.nav-toggle span::after{position:absolute;left:50%;width:20px;height:2.5px;margin-left:-10px;background:var(--ink);border-radius:2px;transition:transform .3s var(--ease),opacity .2s}
+.nav-toggle span{top:50%;margin-top:-1px}
+.nav-toggle span::before,.nav-toggle span::after{content:"";left:0;margin-left:0}
+.nav-toggle span::before{top:-7px}
+.nav-toggle span::after{top:7px}
+.nav.is-open .nav-toggle span{background:transparent}
+.nav.is-open .nav-toggle span::before{transform:translateY(7px) rotate(45deg)}
+.nav.is-open .nav-toggle span::after{transform:translateY(-7px) rotate(-45deg)}
+.nav-toggle:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+
+@media (max-width:1000px){
+  .nav{gap:12px;padding-right:20px}
+  .nav ul{display:none}
+  .nav .cta{margin-left:auto}
+  .nav-toggle{display:inline-block}
+  .nav.is-open ul{display:flex;position:absolute;top:100%;left:20px;right:20px;flex-direction:column;gap:0;padding:6px 0;
+    background:var(--ink);border-radius:4px;box-shadow:0 22px 40px -18px rgba(0,0,0,.55);z-index:30}
+  .nav.is-open li a{display:block;padding:15px 20px;color:var(--white);font-size:15px;border-bottom:1px solid rgba(244,243,239,.12)}
+  .nav.is-open li:last-child a{border-bottom:0}
+  .nav.is-open li a::after{display:none}
+  .nav.is-open li a:hover{color:var(--paint)}
+}
+@media (max-width:760px){
+  .nav .cta{font-size:16px}
+}
+
+/* card grids with a minimum column width must not be wider than a small phone */
+.bizgrid{grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr))}
+.cargrid{grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr))}
+
+/* very small phones: keep brand, call to action and menu button on one row */
+@media (max-width:420px){
+  .nav{gap:8px}
+  .nav .cta{padding:12px 11px 10px 13px;font-size:15px;gap:0}
+  .nav .cta .arrow{display:none}
+  .nav .plaque{font-size:22px;padding:7px 10px 5px}
+}
+
+/* ---- time picker on phones: a list exactly as wide as its field (the native dropdown cannot be sized) ---- */
+.tsel{position:relative;width:100%}
+.tsel-btn{display:block;width:100%;height:44px;margin:0;padding:0 38px 0 10px;text-align:left;font:inherit;font-size:16px;color:var(--ink);
+  background:var(--concrete) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%231B1D21' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 12px center;
+  border:1px solid rgba(27,29,33,.16);border-radius:3px;cursor:pointer;transition:border-color .25s var(--ease),background-color .25s var(--ease)}
+.tsel-btn:focus,.tsel-btn[aria-expanded="true"]{outline:none;border-color:var(--ink);background-color:var(--white);box-shadow:0 0 0 3px rgba(242,196,0,.45)}
+.tsel-list{position:absolute;z-index:40;left:0;right:0;top:calc(100% + 4px);max-height:248px;margin:0;padding:4px 0;list-style:none;overflow-y:auto;overscroll-behavior:contain;
+  background:var(--white);border:1px solid var(--ink);border-radius:3px;box-shadow:0 18px 36px -14px rgba(0,0,0,.45)}
+.tsel-list li{padding:12px 12px;font-size:16px;line-height:1.2;color:var(--ink);cursor:pointer}
+.tsel-list li.is-hi{background:var(--concrete)}
+.tsel-list li.is-current{background:var(--paint);font-weight:600}
+
+/* ---- the big step numbers (1, 2, 3) are decoration: give them their own space under each step instead of
+   sitting on top of the illustrations ---- */
+@media (max-width:1080px){
+  .stop{padding-bottom:150px}
+  .stop .big-n{font-size:140px;line-height:1;bottom:0}
+}
+@media (max-width:760px){
+  .stop{padding-bottom:116px}
+  .stop .big-n{font-size:108px;right:4px;bottom:0}
+}

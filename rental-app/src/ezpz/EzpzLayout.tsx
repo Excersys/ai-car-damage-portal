@@ -1,6 +1,7 @@
-import React, { Suspense, useEffect } from 'react'
+import React, { Suspense, useEffect, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 import ezpzCss from './ezpz.css?inline'
+import mobileCss from './mobile.css?inline'
 import { useStyleSheet } from './useStyleSheet'
 import { useFontsReady } from './useFontsReady'
 
@@ -15,30 +16,40 @@ const ARROW_RIGHT = (
   </svg>
 )
 
-const Nav: React.FC<{ home: boolean }> = ({ home }) => (
-  <header className="nav">
-    <Link className="brand" to="/" aria-label="EZPZ home" onClick={() => home && window.scrollTo({ top: 0, behavior: 'smooth' })}>
-      <span className="plaque">EZPZ</span>
-      <small>Land. Tap. Drive.</small>
-    </Link>
-    <ul>
-      <li><Link to="/book">Book a car</Link></li>
-      <li><Link to="/#scan">The scan</Link></li>
-      <li><Link to="/#compare">Why it is fair</Link></li>
-      {home && <li><Link to="/#where">Where</Link></li>}
-      <li><Link to="/business">For Business</Link></li>
-    </ul>
-    {home ? (
-      <a className="btn btn-ink cta" href="#get">
-        Get the app <span className="arrow">{ARROW_DIAG}</span>
-      </a>
-    ) : (
-      <Link className="btn btn-ink cta" to="/book">
-        Book now <span className="arrow">{ARROW_RIGHT}</span>
+const Nav: React.FC<{ home: boolean }> = ({ home }) => {
+  // phones and tablets get a menu button; the link list is hidden by the stylesheet below 1000px
+  const [open, setOpen] = useState(false)
+  const { pathname, hash } = useLocation()
+  useEffect(() => setOpen(false), [pathname, hash])
+
+  return (
+    <header className={`nav${open ? ' is-open' : ''}`}>
+      <Link className="brand" to="/" aria-label="EZPZ home" onClick={() => home && window.scrollTo({ top: 0, behavior: 'smooth' })}>
+        <span className="plaque">EZPZ</span>
+        <small>Land. Tap. Drive.</small>
       </Link>
-    )}
-  </header>
-)
+      <ul id="nav-links">
+        <li><Link to="/book">Book a car</Link></li>
+        <li><Link to="/#scan">The scan</Link></li>
+        <li><Link to="/#compare">Why it is fair</Link></li>
+        {home && <li><Link to="/#where">Where</Link></li>}
+        <li><Link to="/business">For Business</Link></li>
+      </ul>
+      {home ? (
+        <a className="btn btn-ink cta" href="#get">
+          Get the app <span className="arrow">{ARROW_DIAG}</span>
+        </a>
+      ) : (
+        <Link className="btn btn-ink cta" to="/book">
+          Book now <span className="arrow">{ARROW_RIGHT}</span>
+        </Link>
+      )}
+      <button type="button" className="nav-toggle" aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open} aria-controls="nav-links" onClick={() => setOpen((o) => !o)}>
+        <span aria-hidden="true"></span>
+      </button>
+    </header>
+  )
+}
 
 const Footer: React.FC<{ home: boolean }> = ({ home }) => (
   <footer>
@@ -77,6 +88,7 @@ const Footer: React.FC<{ home: boolean }> = ({ home }) => (
  */
 const EzpzLayout: React.FC = () => {
   useStyleSheet(ezpzCss, 'ezpz')
+  useStyleSheet(mobileCss, 'ezpz-mobile')
   const { pathname, hash } = useLocation()
   const home = pathname === '/'
   const fontsReady = useFontsReady()
